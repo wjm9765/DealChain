@@ -47,9 +47,11 @@ public class MemberController {
     @PostMapping("/login")
     public ResponseEntity<Map<String, Object>> login(@RequestBody Map<String, String> request) {
         try {
+            String name = request.get("name");
             String residentNumber = request.get("residentNumber");
+            String phoneNumber = request.get("phoneNumber");
             
-            Member member = memberService.login(residentNumber);
+            Member member = memberService.login(name, residentNumber, phoneNumber);
             
             // JWT 토큰 생성
             String token = jwtUtil.generateToken(member.getId(), member.getName());

@@ -22,10 +22,10 @@ public class MemberService {
         return memberRepository.save(member);
     }
     
-    // 로그인 (주민번호로 회원 찾기)
+    // 로그인 (이름, 주민번호, 전화번호로 회원 찾기)
     @Transactional(readOnly = true)
-    public Member login(String residentNumber) {
-        return memberRepository.findByResidentNumber(residentNumber)
+    public Member login(String name, String residentNumber, String phoneNumber) {
+        return memberRepository.findByNameAndResidentNumberAndPhoneNumber(name, residentNumber, phoneNumber)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
     }
     
