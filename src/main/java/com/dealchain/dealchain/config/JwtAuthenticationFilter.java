@@ -2,6 +2,7 @@ package com.dealchain.dealchain.config;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,10 +39,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
     
     private String getTokenFromRequest(HttpServletRequest request) {
+        // 1. HttpOnly Cookie에서 토큰 확인 (우선순위)
+        Cookie[] cookies = request.getCookies();
+        if (cookies != null) {
+            for (Cookie cookie : cookies) {
+                if ("token".equals(cookie.getName())) {
+                    return cookie.getValue();
+                }
+            }
+        }
+        
+        // 2. Authorization 헤더에서 토큰 확인 (fallback)
         String bearerToken = request.getHeader("Authorization");
         if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
             return bearerToken.substring(7);
         }
+        
         return null;
     }
 }
