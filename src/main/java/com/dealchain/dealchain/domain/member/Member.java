@@ -25,9 +25,19 @@ public class Member {
     @Column(name = "phone_number", nullable = false)
     private String phoneNumber;
     
+    @Column(name = "signature_image", columnDefinition = "TEXT")
+    private String signatureImage;
+    
     public Member(String name, String residentNumber, String phoneNumber) {
         this.name = name;
         this.residentNumber = residentNumber;
         this.phoneNumber = phoneNumber;
+    }
+    
+    public Member(String name, String residentNumber, String phoneNumber, String signatureImage) {
+        this.name = name;
+        this.residentNumber = residentNumber;
+        this.phoneNumber = phoneNumber;
+        this.signatureImage = signatureImage;
     }
 }

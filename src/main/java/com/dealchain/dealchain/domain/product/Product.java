@@ -28,10 +28,21 @@ public class Product {
     @Column(name = "member_id", nullable = false)
     private Long memberId;
     
+    @Column(name = "product_image", columnDefinition = "TEXT")
+    private String productImage;
+    
     public Product(String productName, Long price, String description, Long memberId) {
         this.productName = productName;
         this.price = price;
         this.description = description;
         this.memberId = memberId;
+    }
+    
+    public Product(String productName, Long price, String description, Long memberId, String productImage) {
+        this.productName = productName;
+        this.price = price;
+        this.description = description;
+        this.memberId = memberId;
+        this.productImage = productImage;
     }
 }

@@ -22,6 +22,17 @@ public class MemberService {
         return memberRepository.save(member);
     }
     
+    // 회원가입 (서명 이미지 포함)
+    public Member register(String name, String residentNumber, String phoneNumber, String signatureImage) {
+        // 주민번호 중복 체크
+        if (memberRepository.existsByResidentNumber(residentNumber)) {
+            throw new IllegalArgumentException("이미 가입된 주민번호입니다.");
+        }
+        
+        Member member = new Member(name, residentNumber, phoneNumber, signatureImage);
+        return memberRepository.save(member);
+    }
+    
     // 로그인 (이름, 주민번호, 전화번호로 회원 찾기)
     @Transactional(readOnly = true)
     public Member login(String name, String residentNumber, String phoneNumber) {

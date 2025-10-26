@@ -4,11 +4,17 @@ import com.dealchain.dealchain.config.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/members")
@@ -20,27 +26,40 @@ public class MemberController {
     @Autowired
     private JwtUtil jwtUtil;
     
-    // 회원가입 API
+    // 회원가입 API (이미지 포함)
     @PostMapping("/register")
-    public ResponseEntity<Map<String, Object>> register(@RequestBody Map<String, String> request) {
+    public ResponseEntity<Map<String, Object>> register(
+            @RequestParam("name") String name,
+            @RequestParam("residentNumber") String residentNumber,
+            @RequestParam("phoneNumber") String phoneNumber,
+            @RequestParam(value = "signatureImage", required = false) MultipartFile signatureImage) {
         try {
-            String name = request.get("name");
-            String residentNumber = request.get("residentNumber");
-            String phoneNumber = request.get("phoneNumber");
+            String signatureImagePath = null;
             
-            Member member = memberService.register(name, residentNumber, phoneNumber);
+            // 서명 이미지가 있는 경우 저장
+            if (signatureImage != null && !signatureImage.isEmpty()) {
+                signatureImagePath = saveImage(signatureImage, "signatures");
+            }
+            
+            Member member = memberService.register(name, residentNumber, phoneNumber, signatureImagePath);
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("message", "회원가입이 완료되었습니다.");
             response.put("memberId", member.getId());
             response.put("name", member.getName());
+            response.put("signatureImage", member.getSignatureImage());
             
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
             response.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(response);
+        } catch (IOException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "이미지 저장 중 오류가 발생했습니다.");
             return ResponseEntity.badRequest().body(response);
         }
     }
@@ -104,18 +123,20 @@ public class MemberController {
     
     // 회원 정보 조회 API
     @GetMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> getMember(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Object>> getMember(@PathVariable("id") Long id) {
         try {
             Member member = memberService.findById(id);
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("member", Map.of(
-                "id", member.getId(),
-                "name", member.getName(),
-                "residentNumber", member.getResidentNumber(),
-                "phoneNumber", member.getPhoneNumber()
-            ));
+            Map<String, Object> memberInfo = new HashMap<>();
+            memberInfo.put("id", member.getId());
+            memberInfo.put("name", member.getName());
+            memberInfo.put("residentNumber", member.getResidentNumber());
+            memberInfo.put("phoneNumber", member.getPhoneNumber());
+            memberInfo.put("signatureImage", member.getSignatureImage() != null ? member.getSignatureImage() : "");
+            
+            response.put("member", memberInfo);
             
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
@@ -124,5 +145,26 @@ public class MemberController {
             response.put("message", e.getMessage());
             return ResponseEntity.badRequest().body(response);
         }
+    }
+    
+    // 이미지 저장 헬퍼 메서드
+    private String saveImage(MultipartFile image, String folder) throws IOException {
+        // 업로드 디렉토리 생성
+        String uploadDir = "uploads/" + folder;
+        Path uploadPath = Paths.get(uploadDir);
+        if (!Files.exists(uploadPath)) {
+            Files.createDirectories(uploadPath);
+        }
+        
+        // 고유한 파일명 생성
+        String originalFilename = image.getOriginalFilename();
+        String extension = originalFilename.substring(originalFilename.lastIndexOf("."));
+        String filename = UUID.randomUUID().toString() + extension;
+        
+        // 파일 저장
+        Path filePath = uploadPath.resolve(filename);
+        Files.copy(image.getInputStream(), filePath);
+        
+        return uploadDir + "/" + filename;
     }
 }

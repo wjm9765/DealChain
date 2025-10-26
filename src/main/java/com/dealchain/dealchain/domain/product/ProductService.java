@@ -20,6 +20,12 @@ public class ProductService {
         return productRepository.save(product);
     }
     
+    // 상품 등록 (이미지 포함)
+    public Product registerProduct(String productName, Long price, String description, Long memberId, String productImage) {
+        Product product = new Product(productName, price, description, memberId, productImage);
+        return productRepository.save(product);
+    }
+    
     // 상품 삭제 (등록자만 삭제 가능)
     public void deleteProduct(Long productId, Long memberId) {
         Optional<Product> productOpt = productRepository.findById(productId);
