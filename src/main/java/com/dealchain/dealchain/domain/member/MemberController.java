@@ -1,5 +1,6 @@
 package com.dealchain.dealchain.domain.member;
 
+import com.dealchain.dealchain.config.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -13,6 +14,9 @@ public class MemberController {
     
     @Autowired
     private MemberService memberService;
+    
+    @Autowired
+    private JwtUtil jwtUtil;
     
     // 회원가입 API
     @PostMapping("/register")
@@ -47,9 +51,13 @@ public class MemberController {
             
             Member member = memberService.login(residentNumber);
             
+            // JWT 토큰 생성
+            String token = jwtUtil.generateToken(member.getId(), member.getName());
+            
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("message", "로그인 성공");
+            response.put("token", token);
             response.put("memberId", member.getId());
             response.put("name", member.getName());
             

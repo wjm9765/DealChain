@@ -2,6 +2,7 @@ package com.dealchain.dealchain.domain.product;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -15,14 +16,25 @@ public class ProductController {
     @Autowired
     private ProductService productService;
     
-    // 상품 등록 API
+    // 상품 등록 API (로그인 필요)
     @PostMapping("/create")
-    public ResponseEntity<Map<String, Object>> registerProduct(@RequestBody Map<String, Object> request) {
+    public ResponseEntity<Map<String, Object>> registerProduct(@RequestBody Map<String, Object> request, 
+                                                              Authentication authentication) {
         try {
+            // 인증 확인
+            if (authentication == null || !authentication.isAuthenticated()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "로그인이 필요합니다.");
+                return ResponseEntity.status(401).body(response);
+            }
+            
+            // JWT에서 사용자 ID 가져오기
+            Long memberId = Long.valueOf(authentication.getName());
+            
             String productName = (String) request.get("productName");
             Long price = Long.valueOf(request.get("price").toString());
             String description = (String) request.get("description");
-            Long memberId = Long.valueOf(request.get("memberId").toString());
             
             Product product = productService.registerProduct(productName, price, description, memberId);
             
@@ -41,12 +53,23 @@ public class ProductController {
         }
     }
     
-    // 상품 삭제 API
+    // 상품 삭제 API (로그인 필요, 본인 상품만 삭제 가능)
     @DeleteMapping("/{productId}")
     public ResponseEntity<Map<String, Object>> deleteProduct(
             @PathVariable Long productId, 
-            @RequestParam Long memberId) {
+            Authentication authentication) {
         try {
+            // 인증 확인
+            if (authentication == null || !authentication.isAuthenticated()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "로그인이 필요합니다.");
+                return ResponseEntity.status(401).body(response);
+            }
+            
+            // JWT에서 사용자 ID 가져오기
+            Long memberId = Long.valueOf(authentication.getName());
+            
             productService.deleteProduct(productId, memberId);
             
             Map<String, Object> response = new HashMap<>();
