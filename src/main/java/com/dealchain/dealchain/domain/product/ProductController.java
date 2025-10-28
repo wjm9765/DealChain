@@ -70,7 +70,7 @@ public class ProductController {
     // 상품 삭제 API (로그인 필요, 본인 상품만 삭제 가능)
     @DeleteMapping("/{productId}")
     public ResponseEntity<Map<String, Object>> deleteProduct(
-            @PathVariable Long productId, 
+            @PathVariable("productId") Long productId, 
             Authentication authentication) {
         try {
             // 인증 확인
@@ -148,7 +148,7 @@ public class ProductController {
     
     // 특정 회원의 상품 목록 조회 API
     @GetMapping("/member/{memberId}")
-    public ResponseEntity<Map<String, Object>> getProductsByMember(@PathVariable Long memberId) {
+    public ResponseEntity<Map<String, Object>> getProductsByMember(@PathVariable("memberId") Long memberId) {
         try {
             List<Product> products = productService.findProductsByMemberId(memberId);
             
