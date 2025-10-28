@@ -9,6 +9,7 @@ import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Base64;
 
 @Component
 public class EncryptionUtil {
@@ -119,5 +120,32 @@ public class EncryptionUtil {
         Cipher cipher = Cipher.getInstance(TRANSFORMATION);
         cipher.init(Cipher.DECRYPT_MODE, getSecretKey());
         return cipher.doFinal(encryptedBytes);
+    }
+    
+    /**
+     * 문자열을 암호화하여 Base64로 인코딩된 문자열 반환
+     * @param plainText 원본 문자열
+     * @return 암호화된 Base64 문자열
+     * @throws Exception
+     */
+    public String encryptString(String plainText) throws Exception {
+        Cipher cipher = Cipher.getInstance(TRANSFORMATION);
+        cipher.init(Cipher.ENCRYPT_MODE, getSecretKey());
+        byte[] encryptedBytes = cipher.doFinal(plainText.getBytes("UTF-8"));
+        return Base64.getEncoder().encodeToString(encryptedBytes);
+    }
+    
+    /**
+     * Base64로 인코딩된 암호화 문자열을 복호화
+     * @param encryptedText 암호화된 Base64 문자열
+     * @return 복호화된 원본 문자열
+     * @throws Exception
+     */
+    public String decryptString(String encryptedText) throws Exception {
+        Cipher cipher = Cipher.getInstance(TRANSFORMATION);
+        cipher.init(Cipher.DECRYPT_MODE, getSecretKey());
+        byte[] decodedBytes = Base64.getDecoder().decode(encryptedText);
+        byte[] decryptedBytes = cipher.doFinal(decodedBytes);
+        return new String(decryptedBytes, "UTF-8");
     }
 }
