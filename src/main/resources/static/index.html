@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket STOMP Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7.0.0/bundles/stomp.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+</head>
+<body>
+<h1>WebSocket STOMP Test</h1>
+<div>
+    <button onclick="connect()">Connect</button>
+    <button onclick="disconnect()">Disconnect</button>
+</div>
+<div>
+    <label for="roomIdInput">Room ID:</label>
+    <input type="text" id="roomIdInput" value="86995efd-4a73-4549-b6f6-14628dcae1f9" />
+    <button onclick="subscribeToRoom()">Subscribe</button>
+    <button onclick="unsubscribeFromRoom()">Unsubscribe</button>
+</div>
+<div>
+    <label for="senderIdInput">Sender ID:</label>
+    <input type="text" id="senderIdInput" value="karina" />
+    <br />
+    <label for="messageInput">Message:</label>
+    <input type="text" id="messageInput" placeholder="Enter message here" />
+    <button onclick="sendMessage()">Send Message (TALK)</button>
+</div>
+<h2>Received Messages:</h2>
+<div id="messages" style="border: 1px solid #ccc; height: 300px; overflow-y: scroll; padding: 10px;"></div>
+
+<script>
+    let stompClient = null;
+    let currentSubscription = null;
+    const messagesDiv = document.getElementById('messages');
+
+    function log(message) {
+        console.log(message);
+        const p = document.createElement('p');
+        p.textContent = `[LOG] ${message}`;
+        messagesDiv.appendChild(p);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    function connect() {
+        if (stompClient && stompClient.active) {
+            log("Already connected.");
+            return;
+        }
+
+        log("Attempting to connect...");
+        stompClient = new StompJs.Client({
+            // SockJS 사용 설정
+            webSocketFactory: () => new SockJS('http://localhost:8080/ws'), // 서버 주소 확인!
+            debug: function (str) { log("STOMP Debug: " + str); },
+            reconnectDelay: 5000,
+            heartbeatIncoming: 4000,
+            heartbeatOutgoing: 4000,
+            onConnect: (frame) => {
+                log('Connected: ' + frame);
+                // 연결 성공 시 UI 업데이트 (예: 버튼 활성화)
+            },
+            onStompError: (frame) => {
+                log('Broker reported error: ' + frame.headers['message']);
+                log('Additional details: ' + frame.body);
+            },
+            onWebSocketError: (error) => {
+                log('WebSocket Error: ' + error);
+            },
+             onDisconnect: () => {
+                 log('Disconnected');
+                 stompClient = null; // 클라이언트 객체 초기화
+                 currentSubscription = null; // 구독 정보 초기화
+             }
+        });
+
+        stompClient.activate(); // 연결 시작
+    }
+
+    function disconnect() {
+        if (stompClient && stompClient.active) {
+            stompClient.deactivate(); // 연결 종료
+        } else {
+            log("Not connected.");
+        }
+    }
+
+    function subscribeToRoom() {
+        if (!stompClient || !stompClient.active) {
+            log("Connect first!");
+            return;
+        }
+        if (currentSubscription) {
+            log("Already subscribed. Unsubscribe first if you want to change the room.");
+            return;
+        }
+
+        const roomId = document.getElementById('roomIdInput').value;
+        if (!roomId) {
+            log("Enter Room ID!");
+            return;
+        }
+        const destination = `/sub/chat/room/${roomId}`;
+
+        log(`Attempting to subscribe to ${destination}`);
+        try {
+            // 구독 시작 및 구독 객체 저장
+            currentSubscription = stompClient.subscribe(destination, (message) => {
+                log(`Received message: ${message.body}`);
+                try {
+                    const msgData = JSON.parse(message.body);
+                    const p = document.createElement('p');
+                    p.innerHTML = `<strong>${msgData.senderId || 'System'}:</strong> ${msgData.message}`;
+                    messagesDiv.appendChild(p);
+                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                } catch(e) {
+                     log(`Error parsing message: ${e}`);
+                }
+            });
+            log(`Subscribed to ${destination} with ID: ${currentSubscription.id}`);
+        } catch (error) {
+            log(`Subscription error: ${error}`);
+        }
+    }
+
+     function unsubscribeFromRoom() {
+         if (!currentSubscription) {
+             log("Not currently subscribed to any room.");
+             return;
+         }
+         try {
+             currentSubscription.unsubscribe(); // 구독 해제
+             log(`Unsubscribed from ID: ${currentSubscription.id}`);
+             currentSubscription = null; // 구독 정보 초기화
+         } catch (error) {
+             log(`Unsubscription error: ${error}`);
+         }
+     }
+
+    function sendMessage() {
+        if (!stompClient || !stompClient.active) {
+            log("Connect first!");
+            return;
+        }
+        if (!currentSubscription) {
+            log("Subscribe to a room first!");
+            return;
+        }
+
+        const roomId = document.getElementById('roomIdInput').value;
+        const senderId = document.getElementById('senderIdInput').value;
+        const messageContent = document.getElementById('messageInput').value;
+
+        if (!senderId || !messageContent.trim()) {
+            log("Enter Sender ID and Message!");
+            return;
+        }
+
+        const messageToSend = {
+            type: "TALK",
+            roomId: roomId,
+            senderId: senderId,
+            message: messageContent
+        };
+
+        const destination = "/pub/chat/message"; // 메시지 발행 목적지
+
+        try {
+            stompClient.publish({
+                destination: destination,
+                body: JSON.stringify(messageToSend)
+            });
+            log(`Message sent to ${destination}: ${JSON.stringify(messageToSend)}`);
+            document.getElementById('messageInput').value = ''; // 입력 필드 비우기
+        } catch (error) {
+            log(`Send error: ${error}`);
+        }
+    }
+</script>
+</body>
+</html>

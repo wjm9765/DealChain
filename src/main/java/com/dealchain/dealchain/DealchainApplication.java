@@ -8,6 +8,6 @@ public class DealchainApplication {
 
 	public static void main(String[] args) {
 		SpringApplication.run(DealchainApplication.class, args);
-	} 
+	}
 
 }
