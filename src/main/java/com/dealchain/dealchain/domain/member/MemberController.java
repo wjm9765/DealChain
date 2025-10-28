@@ -1,7 +1,11 @@
 package com.dealchain.dealchain.domain.member;
 
 import com.dealchain.dealchain.config.JwtUtil;
+import com.dealchain.dealchain.util.EncryptionUtil;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -25,6 +29,9 @@ public class MemberController {
     
     @Autowired
     private JwtUtil jwtUtil;
+    
+    @Autowired
+    private EncryptionUtil encryptionUtil;
     
     // 회원가입 API (이미지 포함)
     @PostMapping("/register")
@@ -147,24 +154,82 @@ public class MemberController {
         }
     }
     
-    // 이미지 저장 헬퍼 메서드
-    private String saveImage(MultipartFile image, String folder) throws IOException {
-        // 업로드 디렉토리 생성
-        String uploadDir = "uploads/" + folder;
-        Path uploadPath = Paths.get(uploadDir);
-        if (!Files.exists(uploadPath)) {
-            Files.createDirectories(uploadPath);
+    // 서명 이미지 조회 API (복호화하여 반환)
+    @GetMapping("/signature/{memberId}")
+    public ResponseEntity<byte[]> getSignatureImage(@PathVariable("memberId") Long memberId) {
+        try {
+            Member member = memberService.findById(memberId);
+            if (member == null || member.getSignatureImage() == null) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            // 데이터베이스의 경로를 암호화된 파일 경로로 변환
+            String originalPath = member.getSignatureImage();
+            String encryptedPath = originalPath.replace("uploads/signatures/", "uploads/signatures_encrypted/");
+            
+            // 암호화된 파일을 복호화하여 반환
+            Path encryptedFilePath = Paths.get(encryptedPath);
+            if (!Files.exists(encryptedFilePath)) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            byte[] encryptedBytes = Files.readAllBytes(encryptedFilePath);
+            byte[] decryptedBytes = encryptionUtil.decryptFileBytes(encryptedBytes);
+            
+            // Content-Type 설정 (이미지 타입에 따라)
+            String contentType = Files.probeContentType(encryptedFilePath);
+            if (contentType == null) {
+                contentType = "application/octet-stream";
+            }
+            
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.parseMediaType(contentType));
+            headers.setContentLength(decryptedBytes.length);
+            
+            return new ResponseEntity<>(decryptedBytes, headers, HttpStatus.OK);
+            
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
-        
-        // 고유한 파일명 생성
-        String originalFilename = image.getOriginalFilename();
-        String extension = originalFilename.substring(originalFilename.lastIndexOf("."));
-        String filename = UUID.randomUUID().toString() + extension;
-        
-        // 파일 저장
-        Path filePath = uploadPath.resolve(filename);
-        Files.copy(image.getInputStream(), filePath);
-        
-        return uploadDir + "/" + filename;
+    }
+    
+    // 이미지 저장 헬퍼 메서드 (서명 이미지 암호화 저장)
+    private String saveImage(MultipartFile image, String folder) throws IOException {
+        try {
+            // 업로드 디렉토리 생성
+            String uploadDir = "uploads/" + folder;
+            String encryptedDir = "uploads/" + folder + "_encrypted";
+            Path uploadPath = Paths.get(uploadDir);
+            Path encryptedPath = Paths.get(encryptedDir);
+            
+            if (!Files.exists(uploadPath)) {
+                Files.createDirectories(uploadPath);
+            }
+            if (!Files.exists(encryptedPath)) {
+                Files.createDirectories(encryptedPath);
+            }
+            
+            // 고유한 파일명 생성
+            String originalFilename = image.getOriginalFilename();
+            String extension = originalFilename.substring(originalFilename.lastIndexOf("."));
+            String filename = UUID.randomUUID().toString() + extension;
+            
+            // 원본 파일 저장 (임시)
+            Path tempFilePath = uploadPath.resolve("temp_" + filename);
+            Files.copy(image.getInputStream(), tempFilePath);
+            
+            // 암호화된 파일 저장
+            String encryptedFilePath = encryptedDir + "/" + filename;
+            encryptionUtil.encryptFile(tempFilePath.toString(), encryptedFilePath);
+            
+            // 임시 파일 삭제
+            Files.deleteIfExists(tempFilePath);
+            
+            // 데이터베이스에는 원본 파일 경로 저장 (보안상 실제로는 암호화된 파일이 저장됨)
+            return uploadDir + "/" + filename;
+            
+        } catch (Exception e) {
+            throw new IOException("서명 이미지 암호화 저장 중 오류 발생: " + e.getMessage(), e);
+        }
     }
 }
