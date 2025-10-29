@@ -8,22 +8,26 @@
 <body>
 <h1>WebSocket STOMP Test</h1>
 <div>
+    <label for="tokenInput">JWT Token:</label>
+    <input type="text" id="tokenInput" placeholder="Enter JWT token here" style="width:400px;" />
     <button onclick="connect()">Connect</button>
-    <button onclick="disconnect()">Disconnect</button>
+    <!-- Disconnect 버튼은 자동 퇴장 후 disconnect하도록 요구되어 제거 -->
 </div>
 <div>
     <label for="roomIdInput">Room ID:</label>
-    <input type="text" id="roomIdInput" value="86995efd-4a73-4549-b6f6-14628dcae1f9" />
+    <input type="text" id="roomIdInput" value="799e09a4-9354-4f4a-b435-7b9fca4483f5" />
     <button onclick="subscribeToRoom()">Subscribe</button>
     <button onclick="unsubscribeFromRoom()">Unsubscribe</button>
 </div>
 <div>
     <label for="senderIdInput">Sender ID:</label>
-    <input type="text" id="senderIdInput" value="karina" />
+    <input type="text" id="senderIdInput" value="10" />
     <br />
     <label for="messageInput">Message:</label>
     <input type="text" id="messageInput" placeholder="Enter message here" />
     <button onclick="sendMessage()">Send Message (TALK)</button>
+    <button onclick="enterRoom()">Enter (ENTER)</button>
+    <button onclick="leaveRoom()">Leave (LEAVE & Disconnect)</button>
 </div>
 <h2>Received Messages:</h2>
 <div id="messages" style="border: 1px solid #ccc; height: 300px; overflow-y: scroll; padding: 10px;"></div>
@@ -47,10 +51,23 @@
             return;
         }
 
+        const token = document.getElementById('tokenInput').value?.trim();
+        if (!token) {
+            log('No token provided. Please enter JWT token before connecting.');
+            return;
+        }
+
         log("Attempting to connect...");
+
+        // Prepare connect headers with Authorization
+        const connectHeaders = {
+            Authorization: 'Bearer ' + token
+        };
+
         stompClient = new StompJs.Client({
             // SockJS 사용 설정
             webSocketFactory: () => new SockJS('http://localhost:8080/ws'), // 서버 주소 확인!
+            connectHeaders: connectHeaders,
             debug: function (str) { log("STOMP Debug: " + str); },
             reconnectDelay: 5000,
             heartbeatIncoming: 4000,
@@ -173,6 +190,68 @@
             document.getElementById('messageInput').value = ''; // 입력 필드 비우기
         } catch (error) {
             log(`Send error: ${error}`);
+        }
+    }
+
+    // 새로 추가: 입장 메시지 발송 (ENTER)
+    function enterRoom() {
+        if (!stompClient || !stompClient.active) {
+            log("Connect first!");
+            return;
+        }
+        const roomId = document.getElementById('roomIdInput').value;
+        const senderId = document.getElementById('senderIdInput').value;
+        if (!roomId || !senderId) {
+            log("Enter Room ID and Sender ID before entering.");
+            return;
+        }
+        const messageToSend = {
+            type: "ENTER",
+            roomId: roomId,
+            senderId: senderId,
+            message: `${senderId}님이 입장합니다.`
+        };
+        const destination = "/pub/chat/message";
+        try {
+            stompClient.publish({ destination: destination, body: JSON.stringify(messageToSend) });
+            log(`ENTER sent: ${JSON.stringify(messageToSend)}`);
+        } catch (error) {
+            log(`ENTER send error: ${error}`);
+        }
+    }
+
+    // 새로 추가: 퇴장 메시지 발송 후 자동 disconnect
+    function leaveRoom() {
+        if (!stompClient || !stompClient.active) {
+            log("Connect first!");
+            return;
+        }
+        const roomId = document.getElementById('roomIdInput').value;
+        const senderId = document.getElementById('senderIdInput').value;
+        if (!roomId || !senderId) {
+            log("Enter Room ID and Sender ID before leaving.");
+            return;
+        }
+        const messageToSend = {
+            type: "LEAVE",
+            roomId: roomId,
+            senderId: senderId,
+            message: `${senderId}님이 퇴장합니다.`
+        };
+        const destination = "/pub/chat/message";
+        try {
+            stompClient.publish({ destination: destination, body: JSON.stringify(messageToSend) });
+            log(`LEAVE sent: ${JSON.stringify(messageToSend)}. Will disconnect shortly.`);
+            // LEAVE 전송 후 서버에 메시지가 전달될 시간을 잠시 준 뒤 연결 종료
+            setTimeout(() => {
+                try {
+                    disconnect();
+                } catch (e) {
+                    log('Error during disconnect: ' + e);
+                }
+            }, 200);
+        } catch (error) {
+            log(`LEAVE send error: ${error}`);
         }
     }
 </script>
