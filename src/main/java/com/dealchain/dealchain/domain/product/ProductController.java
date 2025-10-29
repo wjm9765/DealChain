@@ -1,5 +1,7 @@
 package com.dealchain.dealchain.domain.product;
 
+import com.dealchain.dealchain.domain.product.dto.ProductRegisterRequestDto;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -25,9 +27,7 @@ public class ProductController {
     // 상품 등록 API (로그인 필요, 이미지 포함)
     @PostMapping("/create")
     public ResponseEntity<Map<String, Object>> registerProduct(
-            @RequestParam("productName") String productName,
-            @RequestParam("price") Long price,
-            @RequestParam(value = "description", required = false) String description,
+            @Valid @ModelAttribute ProductRegisterRequestDto requestDto,
             @RequestParam(value = "productImage", required = false) MultipartFile productImage,
             Authentication authentication) {
         try {
@@ -49,7 +49,7 @@ public class ProductController {
                 productImagePath = saveImage(productImage, "products");
             }
             
-            Product product = productService.registerProduct(productName, price, description, memberId, productImagePath);
+            Product product = productService.registerProduct(requestDto.getProductName(), requestDto.getPrice(), requestDto.getDescription(), memberId, productImagePath);
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
