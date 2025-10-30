@@ -19,6 +19,9 @@ public class Product {
     @Column(name = "product_name", nullable = false)
     private String productName;
     
+    @Column(name = "title", nullable = false)
+    private String title;
+
     @Column(name = "price", nullable = false)
     private Long price;
     
@@ -31,15 +34,17 @@ public class Product {
     @Column(name = "product_image", columnDefinition = "TEXT")
     private String productImage;
     
-    public Product(String productName, Long price, String description, Long memberId) {
+    public Product(String productName, String title, Long price, String description, Long memberId) {
         this.productName = productName;
+        this.title = title;
         this.price = price;
         this.description = description;
         this.memberId = memberId;
     }
     
-    public Product(String productName, Long price, String description, Long memberId, String productImage) {
+    public Product(String productName, String title, Long price, String description, Long memberId, String productImage) {
         this.productName = productName;
+        this.title = title;
         this.price = price;
         this.description = description;
         this.memberId = memberId;

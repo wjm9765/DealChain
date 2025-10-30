@@ -15,6 +15,9 @@ public class ProductRegisterRequestDto {
     
     @NotBlank(message = "상품명은 필수입니다.")
     private String productName;
+
+    @NotBlank(message = "제목은 필수입니다.")
+    private String title;
     
     @NotNull(message = "가격은 필수입니다.")
     @PositiveOrZero(message = "가격은 0 이상이어야 합니다.")

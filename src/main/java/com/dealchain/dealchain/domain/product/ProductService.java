@@ -18,14 +18,14 @@ public class ProductService {
     }
 
     // 상품 등록 (클래스 레벨의 트랜잭션 매니저 상속)
-    public Product registerProduct(String productName, Long price, String description, Long memberId) {
-        Product product = new Product(productName, price, description, memberId);
+    public Product registerProduct(String productName, String title, Long price, String description, Long memberId) {
+        Product product = new Product(productName, title, price, description, memberId);
         return productRepository.save(product);
     }
 
     // 상품 등록 (이미지 포함) (클래스 레벨의 트랜잭션 매니저 상속)
-    public Product registerProduct(String productName, Long price, String description, Long memberId, String productImage) {
-        Product product = new Product(productName, price, description, memberId, productImage);
+    public Product registerProduct(String productName, String title, Long price, String description, Long memberId, String productImage) {
+        Product product = new Product(productName, title, price, description, memberId, productImage);
         return productRepository.save(product);
     }
 

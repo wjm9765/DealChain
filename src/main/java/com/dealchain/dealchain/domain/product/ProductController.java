@@ -49,7 +49,14 @@ public class ProductController {
                 productImagePath = saveImage(productImage, "products");
             }
             
-            Product product = productService.registerProduct(requestDto.getProductName(), requestDto.getPrice(), requestDto.getDescription(), memberId, productImagePath);
+            Product product = productService.registerProduct(
+                    requestDto.getProductName(),
+                    requestDto.getTitle(),
+                    requestDto.getPrice(),
+                    requestDto.getDescription(),
+                    memberId,
+                    productImagePath
+            );
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -57,6 +64,7 @@ public class ProductController {
             response.put("productId", product.getId());
             response.put("productName", product.getProductName());
             response.put("productImage", product.getProductImage());
+            response.put("title", product.getTitle());
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {
@@ -111,6 +119,7 @@ public class ProductController {
             productInfo.put("id", product.getId());
             productInfo.put("productName", product.getProductName());
             productInfo.put("price", product.getPrice());
+            productInfo.put("title", product.getTitle());
             productInfo.put("description", product.getDescription() != null ? product.getDescription() : "");
             productInfo.put("memberId", product.getMemberId());
             productInfo.put("productImage", product.getProductImage() != null ? product.getProductImage() : "");
