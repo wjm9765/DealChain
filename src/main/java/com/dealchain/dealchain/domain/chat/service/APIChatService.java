@@ -69,8 +69,8 @@ public class APIChatService {
         List<ChatMessageDto> messageDtos = messages.stream()
                 .map(msg -> new ChatMessageDto(
                         msg.getMessageId(),
-                        msg.getContent(),
                         msg.getSenderId(),
+                        msg.getContent(),
                         msg.getTimestamp()
                 )).collect(Collectors.toList());
 

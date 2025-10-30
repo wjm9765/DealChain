@@ -7,6 +7,6 @@ import lombok.Setter;
 @Setter
 public class ChatRoomRequestDto {
     //private String roomID;
-    private String seller;
-    private String buyer;
+    private Long seller;
+    private Long buyer;
 }

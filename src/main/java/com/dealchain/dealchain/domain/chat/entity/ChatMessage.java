@@ -25,7 +25,7 @@ public class ChatMessage {
 
     // senderID 역할
     @Column(name ="sender_id",nullable = false)
-    private String senderId;
+    private Long senderId;
 
 
     // text 역할

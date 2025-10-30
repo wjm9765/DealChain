@@ -21,10 +21,10 @@ public class ChatRoom {
     private String roomId;
 
     @Column(name = "seller_id",nullable = false)
-    private String sellerId; // 판매자 ID
+    private Long sellerId; // 판매자 ID
 
     @Column(name = "buyer_id",nullable = false)
-    private String buyerId; // 구매자 ID
+    private Long buyerId; // 구매자 ID
 
     // ChatMessage와 1:N 관계, 방 번호로 채팅 내용 조회
     @OneToMany(mappedBy = "chatRoom", cascade = CascadeType.ALL)
@@ -33,7 +33,7 @@ public class ChatRoom {
 
 
     //서비스에서 생성자 활용
-    public static ChatRoom create(String sellerId, String buyerId) {
+    public static ChatRoom create(Long sellerId, Long buyerId) {
         ChatRoom room = new ChatRoom();
         room.sellerId = sellerId;
         room.buyerId = buyerId;

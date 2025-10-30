@@ -21,7 +21,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 @Builder
-public class DealTracking {
+public class DealTrackingData {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -36,15 +36,16 @@ public class WebChatService {
         if (messageDto.getSenderId() == null) {
             throw new EntityNotFoundException("유효하지 않은 사용자입니다.");
         }
-        String seller = chatRoom.getSellerId();
-        String buyer = chatRoom.getBuyerId();
+        Long seller = chatRoom.getSellerId();
+        Long buyer = chatRoom.getBuyerId();
         if (!messageDto.getSenderId().equals(seller) && !messageDto.getSenderId().equals(buyer)) {
             throw new EntityNotFoundException("채팅방에 존재하지 않는 사용자입니다. ID=" + messageDto.getSenderId());
         }
 
         // 3. Principal(토큰)과 senderId 일치 여부 확인
-        if (principal == null || !messageDto.getSenderId().equals(principal.getName())) {
-            throw new EntityNotFoundException("토큰의 사용자와 senderId가 일치하지 않습니다."+principal.getName());
+        Long principalId = Long.valueOf(principal.getName());
+        if (principal == null || !messageDto.getSenderId().equals(principalId)) {
+            throw new EntityNotFoundException("토큰의 사용자와 senderId가 일치하지 않습니다."+principalId);
         }
 
         // 채팅 대화 처리 로직
