@@ -1,6 +1,6 @@
 package com.dealchain.dealchain.config.websocket;
 
-import com.dealchain.dealchain.domain.auth.JwtProvider;
+import com.dealchain.dealchain.domain.security.JwtProvider;
 import java.security.Principal;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
