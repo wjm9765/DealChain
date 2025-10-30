@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class ChatMessageDto {
     private Long messageId;
-    private String senderId;
+    private Long senderId;
     private String content;
     private LocalDateTime timestamp;
 }

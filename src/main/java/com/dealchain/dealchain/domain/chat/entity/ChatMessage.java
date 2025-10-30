@@ -25,7 +25,7 @@ public class ChatMessage {
 
     // senderID 역할
     @Column(name ="sender_id",nullable = false)
-    private String senderId;
+    private Long senderId;
 
 
     // text 역할
@@ -38,6 +38,6 @@ public class ChatMessage {
 
     @PrePersist
     public void prePersist() {
-        this.timestamp = LocalDateTime.now(); // time 자동 설정
+        this.timestamp = LocalDateTime.now(); // 서버기준 시간 설정
     }
 }
