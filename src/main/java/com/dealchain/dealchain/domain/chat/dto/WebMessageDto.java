@@ -13,7 +13,7 @@ public class WebMessageDto {
 
     private MessageType type;
     private String roomId;
-    private String senderId;
+    private Long senderId;
     private String message;
 
     //선택사항

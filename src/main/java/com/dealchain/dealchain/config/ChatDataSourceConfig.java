@@ -48,10 +48,11 @@ public class ChatDataSourceConfig {
 
         // JPA 속성 설정 (필요에 따라 application.properties 값 참조 또는 직접 설정)
         Map<String, Object> properties = new HashMap<>();
-        // properties.put("hibernate.hbm2ddl.auto", "update"); // Chat DB에 맞는 전략 설정
+        //properties.put("hibernate.hbm2ddl.auto", "update"); // Chat DB에 맞는 전략 설정
+        properties.put("hibernate.hbm2ddl.auto", "update");//테이블 자동 생성 추후 삭제 필요
         properties.put("hibernate.dialect", "org.hibernate.dialect.MySQLDialect"); // MySQL Dialect 설정
-        // properties.put("hibernate.show_sql", "true");
-        // properties.put("hibernate.format_sql", "true");
+        //properties.put("hibernate.show_sql", "true");
+        //properties.put("hibernate.format_sql", "true");
         factory.setJpaPropertyMap(properties);
         factory.setPersistenceUnitName("chat"); // Persistence Unit 이름 설정 (선택적)
 

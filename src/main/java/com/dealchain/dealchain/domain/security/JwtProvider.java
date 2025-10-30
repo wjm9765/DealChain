@@ -1,4 +1,4 @@
-package com.dealchain.dealchain.domain.auth;
+package com.dealchain.dealchain.domain.security;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
