@@ -1,21 +1,21 @@
 package com.dealchain.dealchain.domain.member;
 
 import com.dealchain.dealchain.util.EncryptionUtil;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
+import java.util.Optional;
 
 @Service
 @Transactional(transactionManager = "memberTransactionManager")
 public class MemberService {
+    private final MemberRepository memberRepository;
+    private final EncryptionUtil encryptionUtil;
 
-    @Autowired
-    private MemberRepository memberRepository;
-
-    @Autowired
-    private EncryptionUtil encryptionUtil;
+    public MemberService(MemberRepository memberRepository, EncryptionUtil encryptionUtil) {
+        this.memberRepository = memberRepository;
+        this.encryptionUtil = encryptionUtil;
+    }
 
     // 회원가입
     public Member register(String name, String residentNumber, String phoneNumber) {
@@ -57,24 +57,13 @@ public class MemberService {
     @Transactional(readOnly = true, transactionManager = "memberTransactionManager")
     public Member login(String name, String residentNumber, String phoneNumber) {
         try {
-            // 모든 멤버를 가져와서 복호화된 주민번호와 비교
-            List<Member> allMembers = memberRepository.findAll();
+            // 입력 주민번호를 암호화하여 DB의 암호화된 값과 직접 비교
+            String encryptedResidentNumber = encryptionUtil.encryptString(residentNumber);
 
-            for (Member member : allMembers) {
-                try {
-                    String decryptedResidentNumber = encryptionUtil.decryptString(member.getResidentNumber());
-                    if (name.equals(member.getName()) &&
-                            residentNumber.equals(decryptedResidentNumber) &&
-                            phoneNumber.equals(member.getPhoneNumber())) {
-                        return member;
-                    }
-                } catch (Exception e) {
-                    // 복호화 실패 시 해당 멤버는 건너뛰기
-                    continue;
-                }
-            }
+            Optional<Member> memberOpt = memberRepository
+                    .findByNameAndResidentNumberAndPhoneNumber(name, encryptedResidentNumber, phoneNumber);
 
-            throw new IllegalArgumentException("존재하지 않는 회원입니다.");
+            return memberOpt.orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {
