@@ -1,7 +1,10 @@
 package com.dealchain.dealchain.domain.member;
 
 import com.dealchain.dealchain.config.JwtUtil;
+import com.dealchain.dealchain.domain.member.dto.MemberLoginRequestDto;
+import com.dealchain.dealchain.domain.member.dto.MemberRegisterRequestDto;
 import com.dealchain.dealchain.util.EncryptionUtil;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -36,19 +39,20 @@ public class MemberController {
     // 회원가입 API (이미지 포함)
     @PostMapping("/register")
     public ResponseEntity<Map<String, Object>> register(
-            @RequestParam("name") String name,
-            @RequestParam("residentNumber") String residentNumber,
-            @RequestParam("phoneNumber") String phoneNumber,
-            @RequestParam(value = "signatureImage", required = false) MultipartFile signatureImage) {
+            @Valid @ModelAttribute MemberRegisterRequestDto requestDto,
+            @RequestParam(value = "signatureImage", required = true) MultipartFile signatureImage) {
         try {
-            String signatureImagePath = null;
-            
-            // 서명 이미지가 있는 경우 저장
-            if (signatureImage != null && !signatureImage.isEmpty()) {
-                signatureImagePath = saveImage(signatureImage, "signatures");
+            // 서명 이미지 필수 검증
+            if (signatureImage == null || signatureImage.isEmpty()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "서명 이미지는 필수입니다.");
+                return ResponseEntity.badRequest().body(response);
             }
             
-            Member member = memberService.register(name, residentNumber, phoneNumber, signatureImagePath);
+            String signatureImagePath = saveImage(signatureImage, "signatures");
+            
+            Member member = memberService.register(requestDto.getName(), requestDto.getResidentNumber(), requestDto.getPhoneNumber(), signatureImagePath);
             
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -73,14 +77,10 @@ public class MemberController {
     
     // 로그인 API (HttpOnly Cookie 사용)
     @PostMapping("/login")
-    public ResponseEntity<Map<String, Object>> login(@RequestBody Map<String, String> request,
+    public ResponseEntity<Map<String, Object>> login(@Valid @RequestBody MemberLoginRequestDto requestDto,
                                                       HttpServletResponse response) {
         try {
-            String name = request.get("name");
-            String residentNumber = request.get("residentNumber");
-            String phoneNumber = request.get("phoneNumber");
-            
-            Member member = memberService.login(name, residentNumber, phoneNumber);
+            Member member = memberService.login(requestDto.getName(), requestDto.getResidentNumber(), requestDto.getPhoneNumber());
             
             // JWT 토큰 생성
             String token = jwtUtil.generateToken(member.getId(), member.getName());

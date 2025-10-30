@@ -1,34 +1,36 @@
 package com.dealchain.dealchain.domain.member;
 
 import com.dealchain.dealchain.util.EncryptionUtil;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
+import java.util.Optional;
 
 @Service
 @Transactional(transactionManager = "memberTransactionManager")
 public class MemberService {
+    private final MemberRepository memberRepository;
+    private final EncryptionUtil encryptionUtil;
 
-    @Autowired
-    private MemberRepository memberRepository;
-
-    @Autowired
-    private EncryptionUtil encryptionUtil;
+    public MemberService(MemberRepository memberRepository, EncryptionUtil encryptionUtil) {
+        this.memberRepository = memberRepository;
+        this.encryptionUtil = encryptionUtil;
+    }
 
     // 회원가입
     public Member register(String name, String residentNumber, String phoneNumber) {
         try {
-            // 주민번호 암호화
+            // 이름/주민번호/전화번호 암호화
+            String encryptedName = encryptionUtil.encryptString(name);
             String encryptedResidentNumber = encryptionUtil.encryptString(residentNumber);
+            String encryptedPhoneNumber = encryptionUtil.encryptString(phoneNumber);
 
             // 암호화된 주민번호로 중복 체크
             if (memberRepository.existsByResidentNumber(encryptedResidentNumber)) {
                 throw new IllegalArgumentException("이미 가입된 주민번호입니다.");
             }
 
-            Member member = new Member(name, encryptedResidentNumber, phoneNumber);
+            Member member = new Member(encryptedName, encryptedResidentNumber, encryptedPhoneNumber);
             return memberRepository.save(member);
         } catch (Exception e) {
             throw new RuntimeException("회원가입 중 오류가 발생했습니다.", e);
@@ -38,15 +40,17 @@ public class MemberService {
     // 회원가입 (서명 이미지 포함)
     public Member register(String name, String residentNumber, String phoneNumber, String signatureImage) {
         try {
-            // 주민번호 암호화
+            // 이름/주민번호/전화번호 암호화
+            String encryptedName = encryptionUtil.encryptString(name);
             String encryptedResidentNumber = encryptionUtil.encryptString(residentNumber);
+            String encryptedPhoneNumber = encryptionUtil.encryptString(phoneNumber);
 
             // 암호화된 주민번호로 중복 체크
             if (memberRepository.existsByResidentNumber(encryptedResidentNumber)) {
                 throw new IllegalArgumentException("이미 가입된 주민번호입니다.");
             }
 
-            Member member = new Member(name, encryptedResidentNumber, phoneNumber, signatureImage);
+            Member member = new Member(encryptedName, encryptedResidentNumber, encryptedPhoneNumber, signatureImage);
             return memberRepository.save(member);
         } catch (Exception e) {
             throw new RuntimeException("회원가입 중 오류가 발생했습니다.", e);
@@ -57,24 +61,25 @@ public class MemberService {
     @Transactional(readOnly = true, transactionManager = "memberTransactionManager")
     public Member login(String name, String residentNumber, String phoneNumber) {
         try {
-            // 모든 멤버를 가져와서 복호화된 주민번호와 비교
-            List<Member> allMembers = memberRepository.findAll();
+            // 입력값 암호화하여 DB의 암호화된 값과 직접 비교
+            String encryptedName = encryptionUtil.encryptString(name);
+            String encryptedResidentNumber = encryptionUtil.encryptString(residentNumber);
+            String encryptedPhoneNumber = encryptionUtil.encryptString(phoneNumber);
 
-            for (Member member : allMembers) {
-                try {
-                    String decryptedResidentNumber = encryptionUtil.decryptString(member.getResidentNumber());
-                    if (name.equals(member.getName()) &&
-                            residentNumber.equals(decryptedResidentNumber) &&
-                            phoneNumber.equals(member.getPhoneNumber())) {
-                        return member;
-                    }
-                } catch (Exception e) {
-                    // 복호화 실패 시 해당 멤버는 건너뛰기
-                    continue;
-                }
-            }
+            Optional<Member> memberOpt = memberRepository
+                    .findByNameAndResidentNumberAndPhoneNumber(encryptedName, encryptedResidentNumber, encryptedPhoneNumber);
 
-            throw new IllegalArgumentException("존재하지 않는 회원입니다.");
+            Member member = memberOpt.orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
+
+            // 반환용으로 복호화된 사본 생성
+            Member decrypted = new Member(
+                    encryptionUtil.decryptString(member.getName()),
+                    encryptionUtil.decryptString(member.getResidentNumber()),
+                    encryptionUtil.decryptString(member.getPhoneNumber()),
+                    member.getSignatureImage()
+            );
+            decrypted.setId(member.getId());
+            return decrypted;
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {
@@ -82,18 +87,20 @@ public class MemberService {
         }
     }
 
-    // 회원 정보 조회 (복호화된 주민번호 반환)
+    // 회원 정보 조회 (이름/주민번호/전화번호 복호화하여 반환)
     @Transactional(readOnly = true, transactionManager = "memberTransactionManager")
     public Member findById(Long id) {
         try {
             Member member = memberRepository.findById(id)
                     .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
 
-            // 주민번호 복호화
-            String decryptedResidentNumber = encryptionUtil.decryptString(member.getResidentNumber());
-
-            // 복호화된 주민번호로 새로운 Member 객체 생성 (원본은 수정하지 않음)
-            Member decryptedMember = new Member(member.getName(), decryptedResidentNumber, member.getPhoneNumber(), member.getSignatureImage());
+            // 이름/주민번호/전화번호 복호화하여 새로운 Member 객체 생성 (원본은 수정하지 않음)
+            Member decryptedMember = new Member(
+                    encryptionUtil.decryptString(member.getName()),
+                    encryptionUtil.decryptString(member.getResidentNumber()),
+                    encryptionUtil.decryptString(member.getPhoneNumber()),
+                    member.getSignatureImage()
+            );
             decryptedMember.setId(member.getId());
 
             return decryptedMember;
