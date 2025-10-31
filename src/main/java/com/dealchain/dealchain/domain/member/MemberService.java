@@ -65,8 +65,11 @@ public class MemberService {
     public Member register(String name, String residentNumber, String phoneNumber, MultipartFile signatureFile) {
         try {
 
-            // 주민번호 암호화 및 중복 체크
+            String encryptedName = encryptionUtil.encryptString(name);
             String encryptedResidentNumber = encryptionUtil.encryptString(residentNumber);
+            String encryptedPhoneNumber = encryptionUtil.encryptString(phoneNumber);
+
+            // 주민번호 암호화 및 중복 체크
             if (memberRepository.existsByResidentNumber(encryptedResidentNumber)) {
                 throw new IllegalArgumentException("이미 가입된 주민번호입니다.");
             }
@@ -77,7 +80,7 @@ public class MemberService {
                 signatureUrl = s3UploadService.upload(signatureFile, "signatures");
             }
 
-            Member member = new Member(name, encryptedResidentNumber, phoneNumber, signatureUrl);
+            Member member = new Member(encryptedName, encryptedResidentNumber, encryptedPhoneNumber, signatureUrl);
             return memberRepository.save(member);
         } catch (IllegalArgumentException e) {
             throw e;
