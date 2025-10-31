@@ -38,8 +38,10 @@ public class MemberController {
     // 회원가입 API (이미지 포함) - 이미지 파일을 로컬에 저장하지 않고 서비스로 전달
     @PostMapping("/register")
     public ResponseEntity<Map<String, Object>> register(
-            @Valid @ModelAttribute MemberRegisterRequestDto requestDto,
-            @RequestParam(value = "signatureImage", required = true) MultipartFile signatureImage) {
+            @RequestParam("name") String name,
+            @RequestParam("residentNumber") String residentNumber,
+            @RequestParam("phoneNumber") String phoneNumber,
+            @RequestParam(value = "signatureImage", required = false) MultipartFile signatureImage) {
         try {
             if (signatureImage == null || signatureImage.isEmpty()) {
                 Map<String, Object> response = new HashMap<>();
