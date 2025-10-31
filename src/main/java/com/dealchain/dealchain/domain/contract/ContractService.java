@@ -74,6 +74,31 @@ public class ContractService {
     }
 
     /**
+     * ID로 Contract를 삭제합니다. (DB와 S3에서 모두 삭제)
+     *
+     * @param id Contract ID
+     * @throws IllegalArgumentException 존재하지 않는 계약서인 경우
+     */
+    public void deleteContract(Long id) {
+        Contract contract = contractRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 계약서입니다."));
+
+        String filePath = contract.getFilePath();
+
+        try {
+            // S3에서 파일 삭제
+            s3UploadService.deleteFile(filePath);
+
+            // DB에서 Contract 삭제
+            contractRepository.delete(contract);
+        } catch (RuntimeException e) {
+            // S3 삭제 실패 시에도 DB는 삭제하지 않도록 예외 전파
+            // 또는 S3 삭제 실패를 무시하고 DB만 삭제할 수도 있습니다.
+            throw new RuntimeException("계약서 삭제 중 오류가 발생했습니다: " + e.getMessage(), e);
+        }
+    }
+
+    /**
      * Contract와 PDF 파일 정보를 담는 결과 클래스
      */
     public static class ContractPdfResult {

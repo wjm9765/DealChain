@@ -7,6 +7,7 @@ import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
@@ -210,6 +211,37 @@ public class S3UploadService {
             throw new RuntimeException("파일을 읽는 중 오류가 발생했습니다: " + e.getMessage(), e);
         } catch (Exception e) {
             throw new RuntimeException("알 수 없는 다운로드 오류가 발생했습니다: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * S3에서 파일을 삭제합니다.
+     *
+     * @param fileKey S3 버킷 내의 파일 키 (경로) (예: "contracts/uuid-filename.pdf")
+     * @throws RuntimeException 파일 삭제 중 오류가 발생한 경우
+     */
+    public void deleteFile(String fileKey) {
+        if (bucket == null || bucket.isBlank()) {
+            throw new IllegalStateException("S3 버킷 이름(`aws.s3.bucket-name`)이 설정되어 있지 않습니다.");
+        }
+
+        if (fileKey == null || fileKey.isEmpty()) {
+            throw new IllegalArgumentException("파일 키가 제공되지 않았습니다.");
+        }
+
+        try {
+            DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
+                    .bucket(bucket)
+                    .key(fileKey)
+                    .build();
+
+            s3Client.deleteObject(deleteObjectRequest);
+        } catch (software.amazon.awssdk.services.s3.model.S3Exception e) {
+            throw new RuntimeException("S3 삭제 실패 - 코드: " + e.statusCode() + ", 메시지: " + e.getMessage(), e);
+        } catch (software.amazon.awssdk.core.exception.SdkClientException e) {
+            throw new RuntimeException("AWS SDK 클라이언트 오류: " + e.getMessage(), e);
+        } catch (Exception e) {
+            throw new RuntimeException("알 수 없는 삭제 오류가 발생했습니다: " + e.getMessage(), e);
         }
     }
 
