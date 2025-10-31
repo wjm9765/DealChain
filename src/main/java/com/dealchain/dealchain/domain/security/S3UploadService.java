@@ -266,6 +266,62 @@ public class S3UploadService {
     }
 
     /**
+     * S3에 PDF 파일을 업로드하고, 저장된 고유 키(경로)를 반환합니다.
+     *
+     * @param file          업로드할 MultipartFile (PDF)
+     * @param directoryPath S3 버킷 내의 디렉토리 경로 (예: "contracts/")
+     * @return S3에 저장된 파일의 고유 키 (예: "contracts/uuid-filename.pdf")
+     * @throws IOException
+     */
+    public String uploadPdf(MultipartFile file, String directoryPath) {
+        if (bucket == null || bucket.isBlank()) {
+            throw new IllegalStateException("S3 버킷 이름(`aws.s3.bucket-name`)이 설정되어 있지 않습니다.");
+        }
+
+        validatePdfFile(file);
+
+        //파일 이름을 uuid로 랜덤으로 저장
+        String uniqueFileName = directoryPath + UUID.randomUUID().toString() + "-" + (file.getOriginalFilename() == null ? "file.pdf" : file.getOriginalFilename());
+
+        long contentLength = file.getSize();
+
+        try {
+            PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                    .bucket(bucket)
+                    .key(uniqueFileName)
+                    .contentType("application/pdf")
+                    .build();
+
+            if (contentLength <= 0) {
+                // content length가 불명확한 경우 안전하게 바이트로 읽어 업로드
+                byte[] bytes = file.getBytes(); // IOException 가능
+                s3Client.putObject(putObjectRequest, RequestBody.fromBytes(bytes));
+            } else {
+                try (InputStream inputStream = file.getInputStream()) {
+                    s3Client.putObject(putObjectRequest, RequestBody.fromInputStream(inputStream, contentLength));
+                }
+            }
+
+            return uniqueFileName;
+        } catch (software.amazon.awssdk.services.s3.model.S3Exception e) {
+            // S3 서비스 에러 (권한, 버킷 존재 여부, 리전 불일치 등)
+            throw new RuntimeException("S3 업로드 실패 - 코드: " + e.statusCode() + ", 메시지: " + e.getMessage(), e);
+        } catch (software.amazon.awssdk.core.exception.SdkClientException e) {
+            // 네트워크/클라이언트 설정 문제
+            throw new RuntimeException("AWS SDK 클라이언트 오류: " + e.getMessage(), e);
+        } catch (IOException e) {
+            // 파일 읽기 실패
+            throw new RuntimeException("업로드할 파일을 읽는 중 오류가 발생했습니다: " + e.getMessage(), e);
+        } catch (IllegalArgumentException e) {
+            // validatePdfFile 등에서 발생한 입력값 오류
+            throw e;
+        } catch (Exception e) {
+            // 알 수 없는 예외
+            throw new RuntimeException("알 수 없는 업로드 오류가 발생했습니다: " + e.getMessage(), e);
+        }
+    }
+
+    /**
      * [보안] 업로드 파일 검증 (Java 시큐어 코딩 가이드 - '위험한 형식 파일 업로드' 방어)
      * 이미지(JPEG, PNG, jpg)와 PDF 파일만 허용합니다.
      */
@@ -301,6 +357,45 @@ public class S3UploadService {
 
         if (!allowed) {
             throw new IllegalArgumentException("지원되지 않는 파일 형식입니다. (JPEG, JPG, PNG만 허용)");
+        }
+    }
+
+    /**
+     * [보안] PDF 파일 검증 (Java 시큐어 코딩 가이드 - '위험한 형식 파일 업로드' 방어)
+     * PDF 파일만 허용합니다.
+     */
+    private void validatePdfFile(MultipartFile file) {
+        if (file.isEmpty()) {
+            throw new IllegalArgumentException("파일이 비어있습니다.");
+        }
+
+        // 파일 크기 제한 (10MB)
+        long maxSize = 10 * 1024 * 1024; // 10MB
+        if (file.getSize() > maxSize) {
+            throw new IllegalArgumentException("파일 크기가 10MB를 초과할 수 없습니다.");
+        }
+
+        // 허용된 content-type 검사 (PDF)
+        String contentType = file.getContentType();
+        String filename = file.getOriginalFilename();
+        boolean allowed = false;
+
+        if (contentType != null) {
+            if ("application/pdf".equals(contentType)) {
+                allowed = true;
+            }
+        }
+
+        // content-type이 없거나 신뢰할 수 없는 경우 파일 확장자로 대체 검사
+        if (!allowed && filename != null) {
+            String lower = filename.toLowerCase();
+            if (lower.endsWith(".pdf")) {
+                allowed = true;
+            }
+        }
+
+        if (!allowed) {
+            throw new IllegalArgumentException("지원되지 않는 파일 형식입니다. (PDF만 허용)");
         }
     }
 
