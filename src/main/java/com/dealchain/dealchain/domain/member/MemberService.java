@@ -13,14 +13,13 @@ import java.util.Optional;
 public class MemberService {
     private final MemberRepository memberRepository;
     private final EncryptionUtil encryptionUtil;
+    private final S3UploadService s3UploadService;
 
-    public MemberService(MemberRepository memberRepository, EncryptionUtil encryptionUtil) {
+    public MemberService(MemberRepository memberRepository, EncryptionUtil encryptionUtil, S3UploadService s3UploadService) {
         this.memberRepository = memberRepository;
         this.encryptionUtil = encryptionUtil;
+        this.s3UploadService = s3UploadService;
     }
-
-    @Autowired
-    private S3UploadService s3UploadService;
 
     // 회원가입
     public Member register(String name, String residentNumber, String phoneNumber) {
