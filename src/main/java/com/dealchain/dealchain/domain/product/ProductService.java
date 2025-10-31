@@ -1,6 +1,5 @@
 package com.dealchain.dealchain.domain.product;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,19 +11,21 @@ import java.util.Optional;
 @Transactional(transactionManager = "productTransactionManager")
 public class ProductService {
 
-    // @Autowired 주입 방식은 유지합니다. (보안 강화를 위해 final/생성자 주입을 권장합니다.)
-    @Autowired
-    private ProductRepository productRepository;
+    private final ProductRepository productRepository;
+
+    public ProductService(ProductRepository productRepository) {
+        this.productRepository = productRepository;
+    }
 
     // 상품 등록 (클래스 레벨의 트랜잭션 매니저 상속)
-    public Product registerProduct(String productName, Long price, String description, Long memberId) {
-        Product product = new Product(productName, price, description, memberId);
+    public Product registerProduct(String productName, String title, Long price, String description, Long memberId) {
+        Product product = new Product(productName, title, price, description, memberId);
         return productRepository.save(product);
     }
 
     // 상품 등록 (이미지 포함) (클래스 레벨의 트랜잭션 매니저 상속)
-    public Product registerProduct(String productName, Long price, String description, Long memberId, String productImage) {
-        Product product = new Product(productName, price, description, memberId, productImage);
+    public Product registerProduct(String productName, String title, Long price, String description, Long memberId, String productImage) {
+        Product product = new Product(productName, title, price, description, memberId, productImage);
         return productRepository.save(product);
     }
 
