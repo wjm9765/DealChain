@@ -22,10 +22,13 @@ public class ContractService {
     /**
      * PDF 파일을 S3에 업로드하고 경로를 RDS에 저장합니다.
      *
-     * @param pdfFile 업로드할 PDF 파일
+     * @param pdfFile  업로드할 PDF 파일
+     * @param sellerId 판매자 ID
+     * @param buyerId  구매자 ID
+     * @param roomId   채팅방 ID
      * @return 저장된 Contract 엔티티
      */
-    public Contract uploadAndSaveContract(MultipartFile pdfFile) {
+    public Contract uploadAndSaveContract(MultipartFile pdfFile, Long sellerId, Long buyerId, Long roomId) {
         if (pdfFile == null || pdfFile.isEmpty()) {
             throw new IllegalArgumentException("PDF 파일이 제공되지 않았습니다.");
         }
@@ -34,7 +37,7 @@ public class ContractService {
         String filePath = s3UploadService.uploadPdf(pdfFile, "contracts/");
 
         // Contract 엔티티 생성 및 저장
-        Contract contract = new Contract(filePath);
+        Contract contract = new Contract(filePath, sellerId, buyerId, roomId);
         return contractRepository.save(contract);
     }
 

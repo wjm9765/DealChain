@@ -25,7 +25,10 @@ public class ContractController {
      */
     @PostMapping("/upload")
     public ResponseEntity<Map<String, Object>> uploadContract(
-            @RequestParam("pdf") MultipartFile pdfFile) {
+            @RequestParam("pdf") MultipartFile pdfFile,
+            @RequestParam(value = "sellerId", required = false) Long sellerId,
+            @RequestParam(value = "buyerId", required = false) Long buyerId,
+            @RequestParam(value = "roomId", required = false) Long roomId) {
         try {
             if (pdfFile == null || pdfFile.isEmpty()) {
                 Map<String, Object> response = new HashMap<>();
@@ -34,13 +37,16 @@ public class ContractController {
                 return ResponseEntity.badRequest().body(response);
             }
 
-            Contract contract = contractService.uploadAndSaveContract(pdfFile);
+            Contract contract = contractService.uploadAndSaveContract(pdfFile, sellerId, buyerId, roomId);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("message", "계약서가 업로드되었습니다.");
             response.put("contractId", contract.getId());
             response.put("filePath", contract.getFilePath());
+            response.put("sellerId", contract.getSellerId());
+            response.put("buyerId", contract.getBuyerId());
+            response.put("roomId", contract.getRoomId());
 
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {

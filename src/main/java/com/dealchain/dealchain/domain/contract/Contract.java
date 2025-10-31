@@ -19,8 +19,24 @@ public class Contract {
     @Column(name = "file_path", nullable = false, columnDefinition = "TEXT")
     private String filePath;
     
+    @Column(name = "seller_id")
+    private Long sellerId;
+    
+    @Column(name = "buyer_id")
+    private Long buyerId;
+    
+    @Column(name = "room_id")
+    private Long roomId;
+    
     public Contract(String filePath) {
         this.filePath = filePath;
+    }
+    
+    public Contract(String filePath, Long sellerId, Long buyerId, Long roomId) {
+        this.filePath = filePath;
+        this.sellerId = sellerId;
+        this.buyerId = buyerId;
+        this.roomId = roomId;
     }
 }
 
