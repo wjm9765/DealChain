@@ -74,6 +74,30 @@ public class ContractService {
     }
 
     /**
+     * ID로 Contract의 PDF를 교체합니다. (같은 경로로 업로드하여 덮어씁니다)
+     *
+     * @param id      Contract ID
+     * @param pdfFile 새로운 PDF 파일
+     * @return 업데이트된 Contract 엔티티
+     */
+    public Contract updateContractPdf(Long id, MultipartFile pdfFile) {
+        if (pdfFile == null || pdfFile.isEmpty()) {
+            throw new IllegalArgumentException("PDF 파일이 제공되지 않았습니다.");
+        }
+
+        Contract contract = contractRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 계약서입니다."));
+
+        String existingFilePath = contract.getFilePath();
+
+        // S3의 같은 경로에 새로운 PDF 업로드 (기존 파일 자동 덮어쓰기)
+        s3UploadService.uploadPdfToPath(pdfFile, existingFilePath);
+
+        // DB의 filePath는 그대로이므로 저장만 하면 됩니다
+        return contractRepository.save(contract);
+    }
+
+    /**
      * ID로 Contract를 삭제합니다. (DB와 S3에서 모두 삭제)
      *
      * @param id Contract ID

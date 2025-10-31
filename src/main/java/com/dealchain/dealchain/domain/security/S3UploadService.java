@@ -298,6 +298,54 @@ public class S3UploadService {
     }
 
     /**
+     * S3의 특정 경로에 PDF 파일을 업로드합니다. (기존 파일이 있으면 덮어씁니다)
+     *
+     * @param file     업로드할 MultipartFile (PDF)
+     * @param fileKey  S3 버킷 내의 파일 키 (경로) (예: "contracts/uuid-filename.pdf")
+     * @throws RuntimeException 파일 업로드 중 오류가 발생한 경우
+     */
+    public void uploadPdfToPath(MultipartFile file, String fileKey) {
+        if (bucket == null || bucket.isBlank()) {
+            throw new IllegalStateException("S3 버킷 이름(`aws.s3.bucket-name`)이 설정되어 있지 않습니다.");
+        }
+
+        validatePdfFile(file);
+
+        if (fileKey == null || fileKey.isEmpty()) {
+            throw new IllegalArgumentException("파일 키가 제공되지 않았습니다.");
+        }
+
+        long contentLength = file.getSize();
+
+        try {
+            PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                    .bucket(bucket)
+                    .key(fileKey)
+                    .contentType("application/pdf")
+                    .build();
+
+            if (contentLength <= 0) {
+                byte[] bytes = file.getBytes();
+                s3Client.putObject(putObjectRequest, RequestBody.fromBytes(bytes));
+            } else {
+                try (InputStream inputStream = file.getInputStream()) {
+                    s3Client.putObject(putObjectRequest, RequestBody.fromInputStream(inputStream, contentLength));
+                }
+            }
+        } catch (software.amazon.awssdk.services.s3.model.S3Exception e) {
+            throw new RuntimeException("S3 업로드 실패 - 코드: " + e.statusCode() + ", 메시지: " + e.getMessage(), e);
+        } catch (software.amazon.awssdk.core.exception.SdkClientException e) {
+            throw new RuntimeException("AWS SDK 클라이언트 오류: " + e.getMessage(), e);
+        } catch (IOException e) {
+            throw new RuntimeException("업로드할 파일을 읽는 중 오류가 발생했습니다: " + e.getMessage(), e);
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("알 수 없는 업로드 오류가 발생했습니다: " + e.getMessage(), e);
+        }
+    }
+
+    /**
      * S3에 PDF 파일을 업로드하고, 저장된 고유 키(경로)를 반환합니다.
      *
      * @param file          업로드할 MultipartFile (PDF)

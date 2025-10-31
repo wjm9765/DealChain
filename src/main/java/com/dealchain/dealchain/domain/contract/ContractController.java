@@ -83,9 +83,9 @@ public class ContractController {
      * 임시로 아무 PDF나 반환합니다.
      * (현재는 기존에 업로드된 PDF 중 첫 번째를 반환하거나, 없으면 에러 반환)
      *
-     * POST /api/contracts/temp
+     * POST /api/contracts/create
      */
-    @PostMapping("/temp")
+    @PostMapping("/create")
     public ResponseEntity<byte[]> getTempPdf() {
         try {
             // 임시로 기존에 업로드된 PDF 중 첫 번째를 반환
@@ -106,6 +106,45 @@ public class ContractController {
             return ResponseEntity.ok().headers(headers).body(new byte[0]);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /**
+     * ID로 계약서의 PDF를 수정합니다. (S3의 같은 경로로 교체)
+     *
+     * PUT /api/contracts/{id}
+     */
+    @PutMapping("/{id}")
+    public ResponseEntity<Map<String, Object>> updateContract(
+            @PathVariable("id") Long id,
+            @RequestParam("pdf") MultipartFile pdfFile) {
+        try {
+            if (pdfFile == null || pdfFile.isEmpty()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "PDF 파일이 필요합니다.");
+                return ResponseEntity.badRequest().body(response);
+            }
+
+            Contract contract = contractService.updateContractPdf(id, pdfFile);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "계약서가 수정되었습니다.");
+            response.put("contractId", contract.getId());
+            response.put("filePath", contract.getFilePath());
+
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "계약서 수정 중 오류가 발생했습니다: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
 
