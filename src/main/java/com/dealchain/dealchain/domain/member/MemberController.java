@@ -3,8 +3,7 @@ package com.dealchain.dealchain.domain.member;
 
 import com.dealchain.dealchain.config.JwtUtil;
 import com.dealchain.dealchain.domain.member.dto.MemberLoginRequestDto;
-import com.dealchain.dealchain.domain.member.dto.MemberRegisterRequestDto;
-import com.dealchain.dealchain.util.EncryptionUtil;
+import com.dealchain.dealchain.domain.security.S3UploadService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
@@ -16,9 +15,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletResponse;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -33,7 +29,7 @@ public class MemberController {
     private JwtUtil jwtUtil;
 
     @Autowired
-    private EncryptionUtil encryptionUtil;
+    private S3UploadService s3UploadService;
 
     // 회원가입 API (이미지 포함) - 이미지 파일을 로컬에 저장하지 않고 서비스로 전달
     @PostMapping("/register")
@@ -150,37 +146,31 @@ public class MemberController {
         }
     }
 
-    // 서명 이미지 조회 API (현재 구현은 로컬 암호화 파일을 복호화하여 반환함 - S3 사용 시 변경 필요)
+    // 서명 이미지 조회 API (S3에서 이미지를 가져와서 반환)
     @GetMapping("/signature/{memberId}")
     public ResponseEntity<byte[]> getSignatureImage(@PathVariable("memberId") Long memberId) {
         try {
             Member member = memberService.findById(memberId);
-            if (member == null || member.getSignatureImage() == null) {
+            if (member == null || member.getSignatureImage() == null || member.getSignatureImage().isEmpty()) {
                 return ResponseEntity.notFound().build();
             }
 
-            String originalPath = member.getSignatureImage();
-            String encryptedPath = originalPath.replace("uploads/signatures/", "uploads/signatures_encrypted/");
+            // S3 키 (경로) 가져오기
+            String fileKey = member.getSignatureImage();
 
-            Path encryptedFilePath = Paths.get(encryptedPath);
-            if (!Files.exists(encryptedFilePath)) {
-                return ResponseEntity.notFound().build();
-            }
-
-            byte[] encryptedBytes = Files.readAllBytes(encryptedFilePath);
-            byte[] decryptedBytes = encryptionUtil.decryptFileBytes(encryptedBytes);
-
-            String contentType = Files.probeContentType(encryptedFilePath);
-            if (contentType == null) {
-                contentType = "application/octet-stream";
-            }
+            // S3에서 파일 다운로드 (Content-Type 포함)
+            S3UploadService.FileDownloadResult downloadResult = s3UploadService.downloadFileWithContentType(fileKey);
 
             HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.parseMediaType(contentType));
-            headers.setContentLength(decryptedBytes.length);
+            headers.setContentType(MediaType.parseMediaType(downloadResult.getContentType()));
+            headers.setContentLength(downloadResult.getFileBytes().length);
 
-            return new ResponseEntity<>(decryptedBytes, headers, HttpStatus.OK);
+            return new ResponseEntity<>(downloadResult.getFileBytes(), headers, HttpStatus.OK);
 
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
