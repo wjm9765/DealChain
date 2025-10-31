@@ -40,6 +40,13 @@ public class MemberController {
             @RequestParam("phoneNumber") String phoneNumber,
             @RequestParam(value = "signatureImage", required = false) MultipartFile signatureImage) {
         try {
+            if (signatureImage == null || signatureImage.isEmpty()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "서명 이미지는 필수입니다.");
+                return ResponseEntity.badRequest().body(response);
+            }
+
             // 서명 이미지를 로컬에 저장하지 않고 그대로 서비스 계층으로 전달
             Member member = memberService.register(name, residentNumber, phoneNumber, signatureImage);
 
