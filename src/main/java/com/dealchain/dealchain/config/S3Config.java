@@ -7,27 +7,35 @@ import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner; // 👈 [추가]
 
 @Configuration
 public class S3Config {
 
-    // application.properties에서 값 읽어오기
-    @Value("${S3_PUBLIC_KEY}")
+    @Value("${aws.credentials.access-key}")
     private String accessKey;
 
-    @Value("${S3_SECRET_KEY}")
+    @Value("${aws.credentials.secret-key}")
     private String secretKey;
 
-    @Value("${S3_REGION}")
+    @Value("${aws.region}")
     private String region;
 
+    // (참고) 이 Bean은 파일 '업로드/삭제' 시 사용됩니다.
     @Bean
     public S3Client s3Client() {
-        // .env -> properties를 통해 주입받은 키로 자격 증명 객체 생성
         AwsBasicCredentials credentials = AwsBasicCredentials.create(accessKey, secretKey);
-
-        // S3 클라이언트 빈 생성
         return S3Client.builder()
+                .region(Region.of(region))
+                .credentialsProvider(StaticCredentialsProvider.create(credentials))
+                .build();
+    }
+
+    // 👇 [추가] 이 Bean이 'Pre-signed URL'을 생성(발급)할 때 사용됩니다.
+    @Bean
+    public S3Presigner s3Presigner() {
+        AwsBasicCredentials credentials = AwsBasicCredentials.create(accessKey, secretKey);
+        return S3Presigner.builder()
                 .region(Region.of(region))
                 .credentialsProvider(StaticCredentialsProvider.create(credentials))
                 .build();
