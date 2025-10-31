@@ -1,16 +1,17 @@
 package com.dealchain.dealchain.domain.chat.controller;
 
-import com.dealchain.dealchain.domain.chat.dto.ChatMessageRequestDto;
-import com.dealchain.dealchain.domain.chat.dto.ChatMessageRessponseDto;
-import com.dealchain.dealchain.domain.chat.dto.ChatRoomRequestDto;
-import com.dealchain.dealchain.domain.chat.dto.ChatRoomResponseDto;
+import com.dealchain.dealchain.domain.chat.dto.*;
 import com.dealchain.dealchain.domain.chat.service.APIChatService;
+import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.server.ResponseStatusException;
 
 @Controller
 @RequestMapping("/api/chat")
@@ -36,5 +37,33 @@ public class APIChatController {
         return ResponseEntity.ok(response);
     }
 
+    @PostMapping("/getchatrooms")
+    public ResponseEntity<ChatRoomListResponseDto> getChatRooms(
+            @RequestBody ChatRoomUserRequestDto request,
+            Authentication authentication
+    ) {
+        if (authentication == null || authentication.getName() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "토큰이 존재하지 않습니다.");
+        }
+
+        Long principalId;
+        try {
+            principalId = Long.valueOf(authentication.getName());
+        } catch (NumberFormatException e) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "토큰의 사용자 ID 형식이 유효하지 않습니다: " + authentication.getName());
+        }
+
+        Long userId = request.getUserId();
+        if (userId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "userId가 없습니다.");
+        }
+
+        if (!principalId.equals(userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "토큰의 사용자와 요청의 userId가 일치하지 않습니다: " + authentication.getName());
+        }
+
+        ChatRoomListResponseDto response = chatService.getChatRooms(userId);
+        return ResponseEntity.ok(response);
+    }
 
 }

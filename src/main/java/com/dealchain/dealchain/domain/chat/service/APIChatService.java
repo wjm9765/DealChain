@@ -77,4 +77,21 @@ public class APIChatService {
         return new ChatMessageRessponseDto(roomId,messageDtos,true);
     }
 
+    @Transactional(readOnly = true)
+    public ChatRoomListResponseDto getChatRooms(Long userId) {
+
+        List<ChatRoom> rooms = chatRoomRepository.findBySellerIdOrBuyerId(userId, userId);
+
+        //채팅방이하나도 없다면
+        if (rooms == null || rooms.isEmpty()) {
+            return new ChatRoomListResponseDto(List.of(), false, "채팅방이 존재하지 않습니다.");
+        }
+
+        List<chatRoomDto> dtos = rooms.stream()
+                .map(r -> new chatRoomDto(r.getRoomId(), r.getSellerId(), r.getBuyerId()))
+                .collect(Collectors.toList());
+
+        return new ChatRoomListResponseDto(dtos, true, null);
+    }
+
 }

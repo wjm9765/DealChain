@@ -1,8 +1,10 @@
 package com.dealchain.dealchain.domain.member;
 
+import com.dealchain.dealchain.domain.security.S3UploadService;
 import com.dealchain.dealchain.util.EncryptionUtil;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Optional;
 
@@ -16,6 +18,9 @@ public class MemberService {
         this.memberRepository = memberRepository;
         this.encryptionUtil = encryptionUtil;
     }
+
+    @Autowired
+    private S3UploadService s3UploadService;
 
     // 회원가입
     public Member register(String name, String residentNumber, String phoneNumber) {
@@ -56,6 +61,32 @@ public class MemberService {
             throw new RuntimeException("회원가입 중 오류가 발생했습니다.", e);
         }
     }
+
+    //회원가입 - 서명이미지를 s3에 저장
+    public Member register(String name, String residentNumber, String phoneNumber, MultipartFile signatureFile) {
+        try {
+
+            // 주민번호 암호화 및 중복 체크
+            String encryptedResidentNumber = encryptionUtil.encryptString(residentNumber);
+            if (memberRepository.existsByResidentNumber(encryptedResidentNumber)) {
+                throw new IllegalArgumentException("이미 가입된 주민번호입니다.");
+            }
+
+            // signatureFile이 제공되면 유효성 검사 및 S3 업로드
+            String signatureUrl = null;
+            if (signatureFile != null && !signatureFile.isEmpty()) {
+                signatureUrl = s3UploadService.upload(signatureFile, "signatures");
+            }
+
+            Member member = new Member(name, encryptedResidentNumber, phoneNumber, signatureUrl);
+            return memberRepository.save(member);
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("회원가입 중 오류가 발생했습니다.", e);
+        }
+    }
+
 
     // 로그인 (이름, 주민번호, 전화번호로 회원 찾기)
     @Transactional(readOnly = true, transactionManager = "memberTransactionManager")
