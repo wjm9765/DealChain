@@ -58,11 +58,11 @@ public class DealTrackingService { // 클래스 이름 수정 제안
         );
 
         DealTrackingData log = DealTrackingData.builder()
-                 .userId(principalId.toString()) // 👈 서버가 검증한 ID
-                 .roomId(request.getRoomId())     // 👈 클라이언트가 보낸 값 (참고용)
-                 .deviceInfo(request.getDeviceInfo()) // 👈 클라이언트가 보낸 값 (참고용)
-                 .type(type) // 👈 서버가 정의한 값
-                 .timestamp(currentTimestamp) // 👈 서버 기준 시간
+                 .userId(principalId.toString()) // 서버가 검증한 ID
+                 .roomId(request.getRoomId())     // 클라이언트가 보낸 값 (참고용)
+                 .deviceInfo(request.getDeviceInfo()) // 클라이언트가 보낸 값 (참고용)
+                 .type(type) //  서버가 정의한 값
+                 .timestamp(currentTimestamp) //  서버 기준 시간
                  .hashValue(hash)
                  .build();
 
