@@ -1,5 +1,6 @@
 package com.dealchain.dealchain.domain.DealTracking.entity;
 
+import com.dealchain.dealchain.domain.chat.dto.WebMessageDto;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -43,9 +44,9 @@ public class DealTrackingData {
     @Column(name = "hash_value", updatable = false)
     private String hashValue;
 
-    @PrePersist
-    private void onCreate() {
-        this.timestamp = LocalDateTime.now();
-        //this.hashValue = generateHashValue();
-    }
+    //어떤 거래 유형인지 CREATE,EDIT,SIGN,DELETE
+    @Column(name = "type", nullable = false, updatable = false)
+    private String type;
+
+
 }
