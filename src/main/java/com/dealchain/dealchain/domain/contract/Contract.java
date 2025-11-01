@@ -26,7 +26,7 @@ public class Contract {
     private Long buyerId;
     
     @Column(name = "room_id")
-    private Long roomId;
+    private String roomId;
     
     @Column(name = "encrypted_hash", columnDefinition = "TEXT")
     private String encryptedHash;
@@ -35,14 +35,14 @@ public class Contract {
         this.filePath = filePath;
     }
     
-    public Contract(String filePath, Long sellerId, Long buyerId, Long roomId) {
+    public Contract(String filePath, Long sellerId, Long buyerId, String roomId) {
         this.filePath = filePath;
         this.sellerId = sellerId;
         this.buyerId = buyerId;
         this.roomId = roomId;
     }
     
-    public Contract(String filePath, Long sellerId, Long buyerId, Long roomId, String encryptedHash) {
+    public Contract(String filePath, Long sellerId, Long buyerId, String  roomId, String encryptedHash) {
         this.filePath = filePath;
         this.sellerId = sellerId;
         this.buyerId = buyerId;

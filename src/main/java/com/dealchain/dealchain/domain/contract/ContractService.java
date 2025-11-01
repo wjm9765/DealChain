@@ -44,7 +44,7 @@ public class ContractService {
      * @param roomId   채팅방 ID
      * @return 저장된 Contract 엔티티
      */
-    public Contract uploadAndSaveContract(MultipartFile pdfFile, Long sellerId, Long buyerId, Long roomId) {
+    public Contract uploadAndSaveContract(MultipartFile pdfFile, Long sellerId, Long buyerId, String roomId) {
         if (pdfFile == null || pdfFile.isEmpty()) {
             throw new IllegalArgumentException("PDF 파일이 제공되지 않았습니다.");
         }
