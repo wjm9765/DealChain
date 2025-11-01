@@ -28,6 +28,9 @@ public class Contract {
     @Column(name = "room_id")
     private Long roomId;
     
+    @Column(name = "encrypted_hash", columnDefinition = "TEXT")
+    private String encryptedHash;
+    
     public Contract(String filePath) {
         this.filePath = filePath;
     }
@@ -37,6 +40,14 @@ public class Contract {
         this.sellerId = sellerId;
         this.buyerId = buyerId;
         this.roomId = roomId;
+    }
+    
+    public Contract(String filePath, Long sellerId, Long buyerId, Long roomId, String encryptedHash) {
+        this.filePath = filePath;
+        this.sellerId = sellerId;
+        this.buyerId = buyerId;
+        this.roomId = roomId;
+        this.encryptedHash = encryptedHash;
     }
 }
 

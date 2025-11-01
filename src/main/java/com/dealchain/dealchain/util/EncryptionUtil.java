@@ -148,4 +148,79 @@ public class EncryptionUtil {
         byte[] decryptedBytes = cipher.doFinal(decodedBytes);
         return new String(decryptedBytes, "UTF-8");
     }
+    
+    /**
+     * sellerId와 buyerId를 사용하여 해시값을 암호화
+     * secretKey와 sellerId, buyerId를 조합하여 키를 생성하여 암호화합니다.
+     * 
+     * @param hashValue 암호화할 해시값
+     * @param sellerId 판매자 ID
+     * @param buyerId 구매자 ID
+     * @return 암호화된 Base64 문자열
+     * @throws Exception
+     */
+    public String encryptHashWithIds(String hashValue, Long sellerId, Long buyerId) throws Exception {
+        if (hashValue == null || hashValue.isBlank()) {
+            throw new IllegalArgumentException("해시값은 비어있을 수 없습니다.");
+        }
+        if (sellerId == null || buyerId == null) {
+            throw new IllegalArgumentException("sellerId와 buyerId는 필수입니다.");
+        }
+        
+        // sellerId와 buyerId를 조합하여 키 생성
+        SecretKeySpec key = getSecretKeyWithIds(sellerId, buyerId);
+        
+        Cipher cipher = Cipher.getInstance(TRANSFORMATION);
+        cipher.init(Cipher.ENCRYPT_MODE, key);
+        byte[] encryptedBytes = cipher.doFinal(hashValue.getBytes("UTF-8"));
+        return Base64.getEncoder().encodeToString(encryptedBytes);
+    }
+    
+    /**
+     * sellerId와 buyerId를 사용하여 암호화된 해시값을 복호화
+     * 
+     * @param encryptedHash 암호화된 Base64 문자열
+     * @param sellerId 판매자 ID
+     * @param buyerId 구매자 ID
+     * @return 복호화된 해시값
+     * @throws Exception
+     */
+    public String decryptHashWithIds(String encryptedHash, Long sellerId, Long buyerId) throws Exception {
+        if (encryptedHash == null || encryptedHash.isBlank()) {
+            throw new IllegalArgumentException("암호화된 해시값은 비어있을 수 없습니다.");
+        }
+        if (sellerId == null || buyerId == null) {
+            throw new IllegalArgumentException("sellerId와 buyerId는 필수입니다.");
+        }
+        
+        // sellerId와 buyerId를 조합하여 키 생성
+        SecretKeySpec key = getSecretKeyWithIds(sellerId, buyerId);
+        
+        Cipher cipher = Cipher.getInstance(TRANSFORMATION);
+        cipher.init(Cipher.DECRYPT_MODE, key);
+        byte[] decodedBytes = Base64.getDecoder().decode(encryptedHash);
+        byte[] decryptedBytes = cipher.doFinal(decodedBytes);
+        return new String(decryptedBytes, "UTF-8");
+    }
+    
+    /**
+     * secretKey와 sellerId, buyerId를 조합하여 SecretKeySpec 생성
+     * 
+     * @param sellerId 판매자 ID
+     * @param buyerId 구매자 ID
+     * @return SecretKeySpec
+     */
+    private SecretKeySpec getSecretKeyWithIds(Long sellerId, Long buyerId) {
+        // secretKey와 sellerId, buyerId를 조합하여 키 생성
+        String combinedKey = secretKeyString + "::" + sellerId + "::" + buyerId;
+        
+        // SHA-256으로 해시하여 32바이트 키 생성
+        try {
+            java.security.MessageDigest sha = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] keyBytes = sha.digest(combinedKey.getBytes("UTF-8"));
+            return new SecretKeySpec(keyBytes, ALGORITHM);
+        } catch (Exception e) {
+            throw new RuntimeException("키 생성 중 오류가 발생했습니다.", e);
+        }
+    }
 }

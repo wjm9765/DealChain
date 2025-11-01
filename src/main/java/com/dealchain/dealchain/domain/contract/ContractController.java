@@ -47,6 +47,7 @@ public class ContractController {
             response.put("sellerId", contract.getSellerId());
             response.put("buyerId", contract.getBuyerId());
             response.put("roomId", contract.getRoomId());
+            response.put("encryptedHash", contract.getEncryptedHash());
 
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
