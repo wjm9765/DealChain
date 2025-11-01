@@ -28,7 +28,7 @@ public class ContractController {
             @RequestParam("pdf") MultipartFile pdfFile,
             @RequestParam(value = "sellerId", required = false) Long sellerId,
             @RequestParam(value = "buyerId", required = false) Long buyerId,
-            @RequestParam(value = "roomId", required = false) Long roomId) {
+            @RequestParam(value = "roomId", required = false) String roomId) {
         try {
             if (pdfFile == null || pdfFile.isEmpty()) {
                 Map<String, Object> response = new HashMap<>();

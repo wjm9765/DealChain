@@ -25,7 +25,7 @@ public class DealTrackingService { // 클래스 이름 수정 제안
     private final ChatRoomRepository chatRoomRepository;
 
     // 함수 호출 전 토큰 인증 처리 완료
-    @Transactional // DB 처리를 위해 트랜잭션 적용
+    @Transactional(transactionManager = "dealTransactionManager") // DB 처리를 위해 트랜잭션 적용
     public void dealTrack(String type, DealTrackingRequest request) {
 
         // 1. 인증된 토큰에서 사용자 아이디를 가져옴
@@ -61,8 +61,8 @@ public class DealTrackingService { // 클래스 이름 수정 제안
                  .userId(principalId.toString()) // 서버가 검증한 ID
                  .roomId(request.getRoomId())     // 클라이언트가 보낸 값 (참고용)
                  .deviceInfo(request.getDeviceInfo()) // 클라이언트가 보낸 값 (참고용)
-                 .type(type) // 서버가 정의한 값
-                 .timestamp(currentTimestamp) // 서버 기준 시간
+                 .type(type) //  서버가 정의한 값
+                 .timestamp(currentTimestamp) //  서버 기준 시간
                  .hashValue(hash)
                  .build();
 

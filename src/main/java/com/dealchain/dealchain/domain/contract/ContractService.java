@@ -1,8 +1,14 @@
 package com.dealchain.dealchain.domain.contract;
 
+import com.dealchain.dealchain.domain.DealTracking.dto.DealTrackingRequest;
+import com.dealchain.dealchain.domain.DealTracking.service.DealTrackingService;
+import com.dealchain.dealchain.domain.chat.entity.ChatRoom;
+import com.dealchain.dealchain.domain.chat.repository.ChatRoomRepository;
 import com.dealchain.dealchain.domain.security.HashService;
 import com.dealchain.dealchain.domain.security.S3UploadService;
 import com.dealchain.dealchain.util.EncryptionUtil;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -17,15 +23,21 @@ public class ContractService {
     private final S3UploadService s3UploadService;
     private final HashService hashService;
     private final EncryptionUtil encryptionUtil;
+    private final DealTrackingService dealTrackingService;
+    private final ChatRoomRepository chatRoomRepository;
 
     public ContractService(ContractRepository contractRepository, 
                           S3UploadService s3UploadService,
                           HashService hashService,
-                          EncryptionUtil encryptionUtil) {
+                          EncryptionUtil encryptionUtil,
+                          DealTrackingService dealTrackingService,
+                          ChatRoomRepository chatRoomRepository) {
         this.contractRepository = contractRepository;
         this.s3UploadService = s3UploadService;
         this.hashService = hashService;
         this.encryptionUtil = encryptionUtil;
+        this.dealTrackingService = dealTrackingService;
+        this.chatRoomRepository = chatRoomRepository;
     }
 
     /**
@@ -37,13 +49,21 @@ public class ContractService {
      * @param roomId   채팅방 ID
      * @return 저장된 Contract 엔티티
      */
-    public Contract uploadAndSaveContract(MultipartFile pdfFile, Long sellerId, Long buyerId, Long roomId) {
+    public Contract uploadAndSaveContract(MultipartFile pdfFile, Long sellerId, Long buyerId, String roomId) {
         if (pdfFile == null || pdfFile.isEmpty()) {
             throw new IllegalArgumentException("PDF 파일이 제공되지 않았습니다.");
         }
 
         if (sellerId == null || buyerId == null) {
             throw new IllegalArgumentException("sellerId와 buyerId는 필수입니다.");
+        }
+
+        // roomId가 제공된 경우 chat DB에 존재하는지 확인
+        if (roomId != null && !roomId.isEmpty()) {
+            Optional<ChatRoom> chatRoom = chatRoomRepository.findById(roomId);
+            if (chatRoom.isEmpty()) {
+                throw new IllegalArgumentException("존재하지 않는 채팅방(roomId)입니다.");
+            }
         }
 
         // S3에 PDF 업로드
@@ -62,7 +82,12 @@ public class ContractService {
 
         // Contract 엔티티 생성 및 저장
         Contract contract = new Contract(filePath, sellerId, buyerId, roomId, encryptedHash);
-        return contractRepository.save(contract);
+        Contract savedContract = contractRepository.save(contract);
+
+        // DealTracking 기록 (CREATE)
+        recordDealTracking(savedContract, "CREATE", null);
+
+        return savedContract;
     }
 
     /**
@@ -109,6 +134,9 @@ public class ContractService {
             }
         }
 
+        // DealTracking 기록 (READ)
+        recordDealTracking(contract, "READ", null);
+
         return new ContractPdfResult(contract, pdfBytes);
     }
 
@@ -150,8 +178,23 @@ public class ContractService {
         // S3의 같은 경로에 새로운 PDF 업로드 (기존 파일 자동 덮어쓰기)
         s3UploadService.uploadPdfToPath(pdfFile, existingFilePath);
 
-        // DB의 filePath는 그대로이므로 저장만 하면 됩니다
-        return contractRepository.save(contract);
+        // PDF 파일의 내용으로부터 새로운 해시값 생성 및 암호화
+        String hashValue = hashService.generateHashFromFile(pdfFile);
+        String encryptedHash;
+        try {
+            encryptedHash = encryptionUtil.encryptHashWithIds(hashValue, contract.getSellerId(), contract.getBuyerId());
+        } catch (Exception e) {
+            throw new RuntimeException("해시값 암호화 중 오류가 발생했습니다: " + e.getMessage(), e);
+        }
+        contract.setEncryptedHash(encryptedHash);
+
+        // DB의 filePath와 encryptedHash 업데이트
+        Contract updatedContract = contractRepository.save(contract);
+
+        // DealTracking 기록 (EDIT)
+        recordDealTracking(updatedContract, "EDIT", null);
+
+        return updatedContract;
     }
 
     /**
@@ -170,12 +213,73 @@ public class ContractService {
             // S3에서 파일 삭제
             s3UploadService.deleteFile(filePath);
 
+            // DealTracking 기록 (DELETE) - 삭제 전에 기록
+            recordDealTracking(contract, "DELETE", null);
+
             // DB에서 Contract 삭제
             contractRepository.delete(contract);
         } catch (RuntimeException e) {
             // S3 삭제 실패 시에도 DB는 삭제하지 않도록 예외 전파
             // 또는 S3 삭제 실패를 무시하고 DB만 삭제할 수도 있습니다.
             throw new RuntimeException("계약서 삭제 중 오류가 발생했습니다: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 계약서 관련 작업을 DealTracking에 기록합니다.
+     * 
+     * @param contract 계약서 엔티티
+     * @param type 작업 타입 (CREATE, READ, EDIT, DELETE)
+     * @param deviceInfo 기기 정보 (선택사항)
+     */
+    private void recordDealTracking(Contract contract, String type, String deviceInfo) {
+        try {
+            // 인증된 사용자 정보 가져오기
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || !authentication.isAuthenticated()) {
+                // 인증되지 않은 경우 tracking 기록하지 않음
+                return;
+            }
+
+            String principalName = authentication.getName();
+            Long principalId;
+            try {
+                principalId = Long.valueOf(principalName);
+            } catch (NumberFormatException e) {
+                // 사용자 ID 형식이 유효하지 않은 경우 기록하지 않음
+                return;
+            }
+
+            // roomId 확인 (필수)
+            if (contract.getRoomId() == null) {
+                // roomId가 없는 경우 기록하지 않음
+                return;
+            }
+
+            // role 결정 (현재 사용자가 seller인지 buyer인지 확인)
+            String role = null;
+            if (contract.getSellerId() != null && contract.getSellerId().equals(principalId)) {
+                role = "SELLER";
+            } else if (contract.getBuyerId() != null && contract.getBuyerId().equals(principalId)) {
+                role = "BUYER";
+            } else {
+                // 사용자가 seller도 buyer도 아닌 경우 기록하지 않음
+                return;
+            }
+
+            // DealTrackingRequest 생성
+            DealTrackingRequest request = DealTrackingRequest.builder()
+                    .roomId(String.valueOf(contract.getRoomId()))
+                    .role(role)
+                    .deviceInfo(deviceInfo)
+                    .build();
+
+            // DealTracking 기록
+            dealTrackingService.dealTrack(type, request);
+        } catch (Exception e) {
+            // DealTracking 기록 실패는 로그만 남기고 예외를 전파하지 않음
+            // (계약서 작업 자체는 성공해야 하므로)
+            System.err.println("DealTracking 기록 실패: " + e.getMessage());
         }
     }
 
