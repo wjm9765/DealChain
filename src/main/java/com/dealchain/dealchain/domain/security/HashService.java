@@ -8,6 +8,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.LocalDateTime;
 
 /**
  * [보안] 데이터 무결성 검증을 위한 해시 생성 서비스
@@ -26,7 +27,7 @@ public class HashService {
      * @param deviceInfo 기기 정보 (null 허용)
      * @return SHA-256 해시값 (16진수 문자열)
      */
-    public String generateHashFromStrings(String roomId, long userId, String deviceInfo) {
+    public String generateHashFromStrings(String roomId, long userId, String deviceInfo, LocalDateTime timestamp, String type) {
         if (roomId == null || roomId.isBlank()) {
             throw new IllegalArgumentException("roomId는 비어있을 수 없습니다.");
         }
@@ -38,6 +39,8 @@ public class HashService {
                     roomId,
                     String.valueOf(userId),
                     deviceInfo == null ? "" : deviceInfo
+                    , timestamp.toString()
+                    , type
             );
 
             byte[] encodedhash = digest.digest(dataToHash.getBytes(StandardCharsets.UTF_8));
