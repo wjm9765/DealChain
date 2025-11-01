@@ -22,11 +22,11 @@ public class HashService {
      * roomId, userId, deviceInfo로 해시값 생성
      *
      * @param roomId     방 아이디 (null/빈값이면 IllegalArgumentException)
-     * @param sellerId     판매자 ID (long)
-     * @param buyerId     구매자 ID (long)
+     * @param userId     사용자 ID (long)
+     * @param deviceInfo 기기 정보 (null 허용)
      * @return SHA-256 해시값 (16진수 문자열)
      */
-    public String generateHashFromStrings(String roomId, long sellerId, long buyerId) {
+    public String generateHashFromStrings(String roomId, long userId, String deviceInfo) {
         if (roomId == null || roomId.isBlank()) {
             throw new IllegalArgumentException("roomId는 비어있을 수 없습니다.");
         }
@@ -36,8 +36,8 @@ public class HashService {
 
             String dataToHash = String.join("::",
                     roomId,
-                    String.valueOf(sellerId),
-                    String.valueOf(buyerId)
+                    String.valueOf(userId),
+                    deviceInfo == null ? "" : deviceInfo
             );
 
             byte[] encodedhash = digest.digest(dataToHash.getBytes(StandardCharsets.UTF_8));
