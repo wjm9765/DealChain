@@ -2,6 +2,8 @@ package com.dealchain.dealchain.domain.contract;
 
 import com.dealchain.dealchain.domain.DealTracking.dto.DealTrackingRequest;
 import com.dealchain.dealchain.domain.DealTracking.service.DealTrackingService;
+import com.dealchain.dealchain.domain.chat.entity.ChatRoom;
+import com.dealchain.dealchain.domain.chat.repository.ChatRoomRepository;
 import com.dealchain.dealchain.domain.security.HashService;
 import com.dealchain.dealchain.domain.security.S3UploadService;
 import com.dealchain.dealchain.util.EncryptionUtil;
@@ -22,17 +24,20 @@ public class ContractService {
     private final HashService hashService;
     private final EncryptionUtil encryptionUtil;
     private final DealTrackingService dealTrackingService;
+    private final ChatRoomRepository chatRoomRepository;
 
     public ContractService(ContractRepository contractRepository, 
                           S3UploadService s3UploadService,
                           HashService hashService,
                           EncryptionUtil encryptionUtil,
-                          DealTrackingService dealTrackingService) {
+                          DealTrackingService dealTrackingService,
+                          ChatRoomRepository chatRoomRepository) {
         this.contractRepository = contractRepository;
         this.s3UploadService = s3UploadService;
         this.hashService = hashService;
         this.encryptionUtil = encryptionUtil;
         this.dealTrackingService = dealTrackingService;
+        this.chatRoomRepository = chatRoomRepository;
     }
 
     /**
@@ -51,6 +56,14 @@ public class ContractService {
 
         if (sellerId == null || buyerId == null) {
             throw new IllegalArgumentException("sellerId와 buyerId는 필수입니다.");
+        }
+
+        // roomId가 제공된 경우 chat DB에 존재하는지 확인
+        if (roomId != null && !roomId.isEmpty()) {
+            Optional<ChatRoom> chatRoom = chatRoomRepository.findById(roomId);
+            if (chatRoom.isEmpty()) {
+                throw new IllegalArgumentException("존재하지 않는 채팅방(roomId)입니다.");
+            }
         }
 
         // S3에 PDF 업로드
