@@ -21,26 +21,6 @@ public class MemberService {
         this.s3UploadService = s3UploadService;
     }
 
-    // 회원가입
-    public Member register(String name, String residentNumber, String phoneNumber) {
-        try {
-            // 이름/주민번호/전화번호 암호화
-            String encryptedName = encryptionUtil.encryptString(name);
-            String encryptedResidentNumber = encryptionUtil.encryptString(residentNumber);
-            String encryptedPhoneNumber = encryptionUtil.encryptString(phoneNumber);
-
-            // 암호화된 주민번호로 중복 체크
-            if (memberRepository.existsByResidentNumber(encryptedResidentNumber)) {
-                throw new IllegalArgumentException("이미 가입된 주민번호입니다.");
-            }
-
-            Member member = new Member(encryptedName, encryptedResidentNumber, encryptedPhoneNumber);
-            return memberRepository.save(member);
-        } catch (Exception e) {
-            throw new RuntimeException("회원가입 중 오류가 발생했습니다.", e);
-        }
-    }
-
     // 회원가입 (서명 이미지 포함)
     public Member register(String name, String residentNumber, String phoneNumber, String signatureImage) {
         try {
@@ -65,8 +45,11 @@ public class MemberService {
     public Member register(String name, String residentNumber, String phoneNumber, MultipartFile signatureFile) {
         try {
 
-            // 주민번호 암호화 및 중복 체크
+            String encryptedName = encryptionUtil.encryptString(name);
             String encryptedResidentNumber = encryptionUtil.encryptString(residentNumber);
+            String encryptedPhoneNumber = encryptionUtil.encryptString(phoneNumber);
+
+            // 주민번호 암호화 및 중복 체크
             if (memberRepository.existsByResidentNumber(encryptedResidentNumber)) {
                 throw new IllegalArgumentException("이미 가입된 주민번호입니다.");
             }
@@ -77,7 +60,7 @@ public class MemberService {
                 signatureUrl = s3UploadService.upload(signatureFile, "signatures");
             }
 
-            Member member = new Member(name, encryptedResidentNumber, phoneNumber, signatureUrl);
+            Member member = new Member(encryptedName, encryptedResidentNumber, encryptedPhoneNumber, signatureUrl);
             return memberRepository.save(member);
         } catch (IllegalArgumentException e) {
             throw e;

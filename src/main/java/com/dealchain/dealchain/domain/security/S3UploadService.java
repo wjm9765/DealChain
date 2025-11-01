@@ -4,9 +4,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
@@ -125,6 +128,280 @@ public class S3UploadService {
     }
 
     /**
+     * S3에서 파일을 다운로드하여 바이트 배열로 반환합니다.
+     *
+     * @param fileKey S3 버킷 내의 파일 키 (경로) (예: "signatures/uuid-filename.jpg")
+     * @return 파일의 바이트 배열
+     * @throws RuntimeException 파일이 존재하지 않거나 다운로드 중 오류가 발생한 경우
+     */
+    public byte[] downloadFile(String fileKey) {
+        if (bucket == null || bucket.isBlank()) {
+            throw new IllegalStateException("S3 버킷 이름(`aws.s3.bucket-name`)이 설정되어 있지 않습니다.");
+        }
+
+        if (fileKey == null || fileKey.isEmpty()) {
+            throw new IllegalArgumentException("파일 키가 제공되지 않았습니다.");
+        }
+
+        try {
+            GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                    .bucket(bucket)
+                    .key(fileKey)
+                    .build();
+
+            try (ResponseInputStream<GetObjectResponse> responseInputStream = s3Client.getObject(getObjectRequest)) {
+                return responseInputStream.readAllBytes();
+            }
+        } catch (software.amazon.awssdk.services.s3.model.NoSuchKeyException e) {
+            throw new RuntimeException("S3에서 파일을 찾을 수 없습니다: " + fileKey, e);
+        } catch (software.amazon.awssdk.services.s3.model.S3Exception e) {
+            throw new RuntimeException("S3 다운로드 실패 - 코드: " + e.statusCode() + ", 메시지: " + e.getMessage(), e);
+        } catch (software.amazon.awssdk.core.exception.SdkClientException e) {
+            throw new RuntimeException("AWS SDK 클라이언트 오류: " + e.getMessage(), e);
+        } catch (IOException e) {
+            throw new RuntimeException("파일을 읽는 중 오류가 발생했습니다: " + e.getMessage(), e);
+        } catch (Exception e) {
+            throw new RuntimeException("알 수 없는 다운로드 오류가 발생했습니다: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * S3에서 파일을 다운로드하고 Content-Type을 함께 반환합니다.
+     *
+     * @param fileKey S3 버킷 내의 파일 키 (경로)
+     * @return 파일 다운로드 정보 (바이트 배열과 Content-Type을 포함)
+     */
+    public FileDownloadResult downloadFileWithContentType(String fileKey) {
+        if (bucket == null || bucket.isBlank()) {
+            throw new IllegalStateException("S3 버킷 이름(`aws.s3.bucket-name`)이 설정되어 있지 않습니다.");
+        }
+
+        if (fileKey == null || fileKey.isEmpty()) {
+            throw new IllegalArgumentException("파일 키가 제공되지 않았습니다.");
+        }
+
+        try {
+            GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                    .bucket(bucket)
+                    .key(fileKey)
+                    .build();
+
+            try (ResponseInputStream<GetObjectResponse> responseInputStream = s3Client.getObject(getObjectRequest)) {
+                byte[] fileBytes = responseInputStream.readAllBytes();
+                String contentType = responseInputStream.response().contentType();
+                if (contentType == null || contentType.isEmpty()) {
+                    // 파일 확장자로 추정
+                    if (fileKey.toLowerCase().endsWith(".jpg") || fileKey.toLowerCase().endsWith(".jpeg")) {
+                        contentType = "image/jpeg";
+                    } else if (fileKey.toLowerCase().endsWith(".png")) {
+                        contentType = "image/png";
+                    } else {
+                        contentType = "application/octet-stream";
+                    }
+                }
+                return new FileDownloadResult(fileBytes, contentType);
+            }
+        } catch (software.amazon.awssdk.services.s3.model.NoSuchKeyException e) {
+            throw new RuntimeException("S3에서 파일을 찾을 수 없습니다: " + fileKey, e);
+        } catch (software.amazon.awssdk.services.s3.model.S3Exception e) {
+            throw new RuntimeException("S3 다운로드 실패 - 코드: " + e.statusCode() + ", 메시지: " + e.getMessage(), e);
+        } catch (software.amazon.awssdk.core.exception.SdkClientException e) {
+            throw new RuntimeException("AWS SDK 클라이언트 오류: " + e.getMessage(), e);
+        } catch (IOException e) {
+            throw new RuntimeException("파일을 읽는 중 오류가 발생했습니다: " + e.getMessage(), e);
+        } catch (Exception e) {
+            throw new RuntimeException("알 수 없는 다운로드 오류가 발생했습니다: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * S3에서 파일을 삭제합니다.
+     *
+     * @param fileKey S3 버킷 내의 파일 키 (경로) (예: "contracts/uuid-filename.pdf")
+     * @throws RuntimeException 파일 삭제 중 오류가 발생한 경우
+     */
+    public void deleteFile(String fileKey) {
+        if (bucket == null || bucket.isBlank()) {
+            throw new IllegalStateException("S3 버킷 이름(`aws.s3.bucket-name`)이 설정되어 있지 않습니다.");
+        }
+
+        if (fileKey == null || fileKey.isEmpty()) {
+            throw new IllegalArgumentException("파일 키가 제공되지 않았습니다.");
+        }
+
+        try {
+            DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
+                    .bucket(bucket)
+                    .key(fileKey)
+                    .build();
+
+            s3Client.deleteObject(deleteObjectRequest);
+        } catch (software.amazon.awssdk.services.s3.model.S3Exception e) {
+            throw new RuntimeException("S3 삭제 실패 - 코드: " + e.statusCode() + ", 메시지: " + e.getMessage(), e);
+        } catch (software.amazon.awssdk.core.exception.SdkClientException e) {
+            throw new RuntimeException("AWS SDK 클라이언트 오류: " + e.getMessage(), e);
+        } catch (Exception e) {
+            throw new RuntimeException("알 수 없는 삭제 오류가 발생했습니다: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * S3에서 파일의 Content-Type을 가져옵니다.
+     *
+     * @param fileKey S3 버킷 내의 파일 키 (경로)
+     * @return Content-Type 문자열, 없으면 "application/octet-stream"
+     */
+    public String getContentType(String fileKey) {
+        if (bucket == null || bucket.isBlank() || fileKey == null || fileKey.isEmpty()) {
+            return "application/octet-stream";
+        }
+
+        try {
+            GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                    .bucket(bucket)
+                    .key(fileKey)
+                    .build();
+
+            GetObjectResponse response = s3Client.getObject(getObjectRequest).response();
+            String contentType = response.contentType();
+            return contentType != null ? contentType : "application/octet-stream";
+        } catch (Exception e) {
+            // 파일 확장자로 추정
+            if (fileKey.toLowerCase().endsWith(".jpg") || fileKey.toLowerCase().endsWith(".jpeg")) {
+                return "image/jpeg";
+            } else if (fileKey.toLowerCase().endsWith(".png")) {
+                return "image/png";
+            }
+            return "application/octet-stream";
+        }
+    }
+
+    /**
+     * 파일 다운로드 결과를 담는 클래스
+     */
+    public static class FileDownloadResult {
+        private final byte[] fileBytes;
+        private final String contentType;
+
+        public FileDownloadResult(byte[] fileBytes, String contentType) {
+            this.fileBytes = fileBytes;
+            this.contentType = contentType;
+        }
+
+        public byte[] getFileBytes() {
+            return fileBytes;
+        }
+
+        public String getContentType() {
+            return contentType;
+        }
+    }
+
+    /**
+     * S3의 특정 경로에 PDF 파일을 업로드합니다. (기존 파일이 있으면 덮어씁니다)
+     *
+     * @param file     업로드할 MultipartFile (PDF)
+     * @param fileKey  S3 버킷 내의 파일 키 (경로) (예: "contracts/uuid-filename.pdf")
+     * @throws RuntimeException 파일 업로드 중 오류가 발생한 경우
+     */
+    public void uploadPdfToPath(MultipartFile file, String fileKey) {
+        if (bucket == null || bucket.isBlank()) {
+            throw new IllegalStateException("S3 버킷 이름(`aws.s3.bucket-name`)이 설정되어 있지 않습니다.");
+        }
+
+        validatePdfFile(file);
+
+        if (fileKey == null || fileKey.isEmpty()) {
+            throw new IllegalArgumentException("파일 키가 제공되지 않았습니다.");
+        }
+
+        long contentLength = file.getSize();
+
+        try {
+            PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                    .bucket(bucket)
+                    .key(fileKey)
+                    .contentType("application/pdf")
+                    .build();
+
+            if (contentLength <= 0) {
+                byte[] bytes = file.getBytes();
+                s3Client.putObject(putObjectRequest, RequestBody.fromBytes(bytes));
+            } else {
+                try (InputStream inputStream = file.getInputStream()) {
+                    s3Client.putObject(putObjectRequest, RequestBody.fromInputStream(inputStream, contentLength));
+                }
+            }
+        } catch (software.amazon.awssdk.services.s3.model.S3Exception e) {
+            throw new RuntimeException("S3 업로드 실패 - 코드: " + e.statusCode() + ", 메시지: " + e.getMessage(), e);
+        } catch (software.amazon.awssdk.core.exception.SdkClientException e) {
+            throw new RuntimeException("AWS SDK 클라이언트 오류: " + e.getMessage(), e);
+        } catch (IOException e) {
+            throw new RuntimeException("업로드할 파일을 읽는 중 오류가 발생했습니다: " + e.getMessage(), e);
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("알 수 없는 업로드 오류가 발생했습니다: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * S3에 PDF 파일을 업로드하고, 저장된 고유 키(경로)를 반환합니다.
+     *
+     * @param file          업로드할 MultipartFile (PDF)
+     * @param directoryPath S3 버킷 내의 디렉토리 경로 (예: "contracts/")
+     * @return S3에 저장된 파일의 고유 키 (예: "contracts/uuid-filename.pdf")
+     * @throws IOException
+     */
+    public String uploadPdf(MultipartFile file, String directoryPath) {
+        if (bucket == null || bucket.isBlank()) {
+            throw new IllegalStateException("S3 버킷 이름(`aws.s3.bucket-name`)이 설정되어 있지 않습니다.");
+        }
+
+        validatePdfFile(file);
+
+        //파일 이름을 uuid로 랜덤으로 저장
+        String uniqueFileName = directoryPath + UUID.randomUUID().toString() + "-" + (file.getOriginalFilename() == null ? "file.pdf" : file.getOriginalFilename());
+
+        long contentLength = file.getSize();
+
+        try {
+            PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                    .bucket(bucket)
+                    .key(uniqueFileName)
+                    .contentType("application/pdf")
+                    .build();
+
+            if (contentLength <= 0) {
+                // content length가 불명확한 경우 안전하게 바이트로 읽어 업로드
+                byte[] bytes = file.getBytes(); // IOException 가능
+                s3Client.putObject(putObjectRequest, RequestBody.fromBytes(bytes));
+            } else {
+                try (InputStream inputStream = file.getInputStream()) {
+                    s3Client.putObject(putObjectRequest, RequestBody.fromInputStream(inputStream, contentLength));
+                }
+            }
+
+            return uniqueFileName;
+        } catch (software.amazon.awssdk.services.s3.model.S3Exception e) {
+            // S3 서비스 에러 (권한, 버킷 존재 여부, 리전 불일치 등)
+            throw new RuntimeException("S3 업로드 실패 - 코드: " + e.statusCode() + ", 메시지: " + e.getMessage(), e);
+        } catch (software.amazon.awssdk.core.exception.SdkClientException e) {
+            // 네트워크/클라이언트 설정 문제
+            throw new RuntimeException("AWS SDK 클라이언트 오류: " + e.getMessage(), e);
+        } catch (IOException e) {
+            // 파일 읽기 실패
+            throw new RuntimeException("업로드할 파일을 읽는 중 오류가 발생했습니다: " + e.getMessage(), e);
+        } catch (IllegalArgumentException e) {
+            // validatePdfFile 등에서 발생한 입력값 오류
+            throw e;
+        } catch (Exception e) {
+            // 알 수 없는 예외
+            throw new RuntimeException("알 수 없는 업로드 오류가 발생했습니다: " + e.getMessage(), e);
+        }
+    }
+
+    /**
      * [보안] 업로드 파일 검증 (Java 시큐어 코딩 가이드 - '위험한 형식 파일 업로드' 방어)
      * 이미지(JPEG, PNG, jpg)와 PDF 파일만 허용합니다.
      */
@@ -160,6 +437,45 @@ public class S3UploadService {
 
         if (!allowed) {
             throw new IllegalArgumentException("지원되지 않는 파일 형식입니다. (JPEG, JPG, PNG만 허용)");
+        }
+    }
+
+    /**
+     * [보안] PDF 파일 검증 (Java 시큐어 코딩 가이드 - '위험한 형식 파일 업로드' 방어)
+     * PDF 파일만 허용합니다.
+     */
+    private void validatePdfFile(MultipartFile file) {
+        if (file.isEmpty()) {
+            throw new IllegalArgumentException("파일이 비어있습니다.");
+        }
+
+        // 파일 크기 제한 (10MB)
+        long maxSize = 10 * 1024 * 1024; // 10MB
+        if (file.getSize() > maxSize) {
+            throw new IllegalArgumentException("파일 크기가 10MB를 초과할 수 없습니다.");
+        }
+
+        // 허용된 content-type 검사 (PDF)
+        String contentType = file.getContentType();
+        String filename = file.getOriginalFilename();
+        boolean allowed = false;
+
+        if (contentType != null) {
+            if ("application/pdf".equals(contentType)) {
+                allowed = true;
+            }
+        }
+
+        // content-type이 없거나 신뢰할 수 없는 경우 파일 확장자로 대체 검사
+        if (!allowed && filename != null) {
+            String lower = filename.toLowerCase();
+            if (lower.endsWith(".pdf")) {
+                allowed = true;
+            }
+        }
+
+        if (!allowed) {
+            throw new IllegalArgumentException("지원되지 않는 파일 형식입니다. (PDF만 허용)");
         }
     }
 

@@ -80,6 +80,26 @@ public class HashService {
         }
     }
 
+    /**
+     * 바이트 배열로부터 해시값을 생성합니다.
+     * 
+     * @param bytes 해시를 생성할 바이트 배열
+     * @return SHA-256 해시값 (16진수 문자열)
+     */
+    public String generateHashFromBytes(byte[] bytes) {
+        if (bytes == null || bytes.length == 0) {
+            throw new IllegalArgumentException("해시를 생성할 바이트 배열이 비어있습니다.");
+        }
+
+        try {
+            MessageDigest digest = MessageDigest.getInstance(HASH_ALGORITHM);
+            byte[] encodedhash = digest.digest(bytes);
+            return bytesToHex(encodedhash);
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("해시값 생성에 실패했습니다.", e);
+        }
+    }
+
     private String bytesToHex(byte[] hash) {
         StringBuilder hexString = new StringBuilder(2 * hash.length);
         for (byte b : hash) {
