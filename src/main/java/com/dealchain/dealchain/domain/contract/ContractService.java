@@ -90,6 +90,9 @@ public class ContractService {
         return savedContract;
     }
 
+
+
+
     /**
      * ID로 Contract를 조회하고 S3에서 PDF 파일을 다운로드합니다.
      * 저장된 해시값과 다운로드한 PDF의 해시값을 비교하여 무결성을 검증합니다.
@@ -280,6 +283,71 @@ public class ContractService {
             // DealTracking 기록 실패는 로그만 남기고 예외를 전파하지 않음
             // (계약서 작업 자체는 성공해야 하므로)
             System.err.println("DealTracking 기록 실패: " + e.getMessage());
+        }
+    }
+
+    /**
+     * '계약서 생성' 이벤트에 대한 거래 추적을 기록합니다.
+     * Contract 객체 생성 전에 호출되며, 주요 ID와 deviceInfo를 인자로 받습니다.
+     *
+     * @param type       추적 유형 (예: "CREATE_DRAFT")
+     * @param roomId     거래 채팅방 ID
+     * @param sellerId   판매자 ID
+     * @param buyerId    구매자 ID
+     * @param deviceInfo 요청 디바이스 정보
+     */
+     public void recordDealTrackingForCreate(String type, String roomId, Long sellerId, Long buyerId, String deviceInfo) {
+        try {
+            // 인증 정보 확인
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || !authentication.isAuthenticated()) {
+                System.err.println("유효하지 않은 사용자임");
+                return;
+            }
+
+            String principalName = authentication.getName();
+            Long principalId;
+            try {
+                principalId = Long.valueOf(principalName);
+            } catch (NumberFormatException e) {
+
+                System.err.println("DealTracking 중단: 유효하지 않은 Principal ID (principalName: {})");
+                return;
+            }
+
+
+            if (roomId == null || roomId.isEmpty()) {
+                System.err.println("DealTracking 중단: roomId가 null이거나 비어있음 (userId: {})");
+                return;
+            }
+
+
+            String role = null;
+            if (sellerId != null && sellerId.equals(principalId)) {
+                role = "SELLER";
+            } else if (buyerId != null && buyerId.equals(principalId)) {
+                role = "BUYER";
+            } else {
+                // 사용자가 해당 거래의 판매자도, 구매자도 아님 (인가(Authorization) 실패)
+                System.out.println("DealTracking 중단: 사용자가 거래 당사자가 아님"+ principalId + roomId);
+                return;
+            }
+
+            // 4. DealTrackingRequest 생성 (인자 사용)
+            DealTrackingRequest request = DealTrackingRequest.builder()
+                    .roomId(roomId)
+                    .role(role)
+                    .deviceInfo(deviceInfo)
+                    .build();
+
+            // 5. DealTracking 기록
+            dealTrackingService.dealTrack(type, request);
+
+        } catch (Exception e) {
+
+            // 예외를 전파하지 않고 경고 로그만 남깁니다.
+            System.err.println("DealTracking 기록 실패 (핵심 로직에 영향 없음): "+e.getMessage());
+
         }
     }
 

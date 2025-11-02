@@ -1,5 +1,14 @@
 package com.dealchain.dealchain.domain.contract;
 
+import com.dealchain.dealchain.domain.AI.dto.ContractDefaultReqeustDto;
+import com.dealchain.dealchain.domain.AI.service.AICreateContract;
+import com.dealchain.dealchain.domain.AI.service.ChatPaser;
+import com.dealchain.dealchain.domain.DealTracking.service.DealTrackingService;
+import com.dealchain.dealchain.domain.chat.repository.ChatRoomRepository;
+import com.dealchain.dealchain.domain.contract.dto.ContractCreateRequestDto;
+import com.dealchain.dealchain.domain.contract.dto.ContractResponseDto;
+import com.dealchain.dealchain.domain.product.Product;
+import com.dealchain.dealchain.domain.product.ProductService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -10,14 +19,29 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/contracts")
 public class ContractController {
-
-    @Autowired
-    private ContractService contractService;
-
+    private final ContractService contractService;
+    private final ChatPaser chatPaser;
+    private final AICreateContract AICreateContract;
+    private final ProductService productService;
+    private final ChatRoomRepository chatRoomRepository;
+    @Autowired // (Spring 4.3+ 부터 생성자가 1개면 @Autowired 생략 가능)
+    public ContractController(ContractService contractService,
+                              AICreateContract aiCreateContract,
+                              ChatPaser chatPaser,
+                              ProductService productService,
+                              ChatRoomRepository chatRoomRepository
+    ) {
+        this.contractService = contractService;
+        this.AICreateContract = aiCreateContract;
+        this.chatPaser = chatPaser;
+        this.productService = productService;
+        this.chatRoomRepository = chatRoomRepository;
+    }
     /**
      * PDF 파일을 업로드하여 S3에 저장하고 경로를 RDS에 저장합니다.
      *
@@ -87,32 +111,80 @@ public class ContractController {
     }
 
     /**
-     * 임시로 아무 PDF나 반환합니다.
-     * (현재는 기존에 업로드된 PDF 중 첫 번째를 반환하거나, 없으면 에러 반환)
+     * 계약서 생성 로직
      *
      * POST /api/contracts/create
-     */
+     * @param requestDto (ContractCreateRequestDto: roomId 포함)
+     * @return ContractResponseDto (isSuccess, data: AI가 생성한 JSON 문자열)
+     **/
     @PostMapping("/create")
-    public ResponseEntity<byte[]> getTempPdf() {
+    public ResponseEntity<ContractResponseDto> createContractFromChat(@RequestBody ContractCreateRequestDto requestDto) {
+
+
         try {
-            // 임시로 기존에 업로드된 PDF 중 첫 번째를 반환
-            // 실제로는 샘플 PDF를 생성하거나 특정 PDF를 반환해야 합니다.
-            ContractService.ContractPdfResult result = contractService.getFirstContractPdf();
+            String roomId = requestDto.getRoomId();
 
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_PDF);
-            headers.setContentLength(result.getPdfBytes().length);
-            headers.setContentDispositionFormData("attachment", "temp_contract.pdf");
 
-            return new ResponseEntity<>(result.getPdfBytes(), headers, HttpStatus.OK);
-        } catch (IllegalArgumentException e) {
-            // 계약서가 없을 경우 임시 PDF 바이트 배열 반환 (빈 PDF)
-            // 실제로는 샘플 PDF 생성 로직이 필요합니다.
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_PDF);
-            return ResponseEntity.ok().headers(headers).body(new byte[0]);
+            if (roomId == null || roomId.isEmpty()) {
+                ContractResponseDto errorResponse = ContractResponseDto.builder()
+                        .isSuccess(false)
+                        .data(null)
+                        .build();
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+
+            //0. 거래 추적 테이블 작성
+            contractService.recordDealTrackingForCreate(
+                    "CREATE", // 추적 유형
+                    requestDto.getRoomId(),
+                    requestDto.getSellerId(),
+                    requestDto.getBuyerId(),
+                    requestDto.getDeviceInfo()
+            );
+
+
+            // 1. roomId로 대화 내역(String) 조회
+            String chatLog = chatPaser.buildSenderToContentsJsonByRoomId(roomId);
+
+            //대화 내역 뿐만 아니라 상품에 대한 정보도 보내야됨 description
+            Optional<Long> productIdOpt = chatRoomRepository.findProductIdByRoomId(roomId);
+            Long productId = productIdOpt.orElseThrow(
+                    () -> new IllegalArgumentException("해당 roomId에 대한 productId가 없습니다. roomId=" + roomId)
+            );
+            Product product = productService.findById(productId);
+
+
+            ContractDefaultReqeustDto default_request = ContractDefaultReqeustDto.builder()
+                    .sellerId(requestDto.getSellerId())
+                    .buyerId(requestDto.getBuyerId())
+                    .product(product)
+                    .build();
+
+            // 2. 대화 내역을 Bedrock AI에게 전송
+            String aiContractJson = AICreateContract.invokeClaude(chatLog,default_request);
+
+
+            // 3. 성공 응답(DTO) 생성
+            ContractResponseDto successResponse = ContractResponseDto.builder()
+                    .isSuccess(true)
+                    .data(aiContractJson) // AI가 생성한 JSON 문자열
+                    .build();
+
+
+            return ResponseEntity.ok(successResponse);
+
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+
+            // 오류 발생 시, 서버 로그에만 상세 내용을 기록하기
+            System.err.println("Failed to create contract from chat for roomId: {}" + e.getMessage());
+            ContractResponseDto errorResponse = ContractResponseDto.builder()
+                    .isSuccess(false)
+                    .data(null)
+                    .build();
+
+            // 500 Internal Server Error 반환
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(errorResponse);
         }
     }
 

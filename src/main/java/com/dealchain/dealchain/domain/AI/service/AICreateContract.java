@@ -1,6 +1,8 @@
 // java
 package com.dealchain.dealchain.domain.AI.service;
 
+import com.dealchain.dealchain.domain.AI.dto.ContractDefaultReqeustDto;
+import com.dealchain.dealchain.domain.contract.Contract;
 import jakarta.annotation.PostConstruct;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -18,14 +20,16 @@ import java.nio.charset.StandardCharsets;
 @Service
 public class AICreateContract {
     private final BedrockRuntimeClient bedrockClient;
+    private final ContractDtoJsonConverter contractDtoJsonConverter;
 
     @Value("classpath:prompt/claude-contract-system-prompt.txt")
     private Resource systemPromptResource;
 
     private String systemPrompt;
 
-    public AICreateContract(BedrockRuntimeClient bedrockClient) {
+    public AICreateContract(BedrockRuntimeClient bedrockClient, ContractDtoJsonConverter contractDtoJsonConverter) {
         this.bedrockClient = bedrockClient;
+        this.contractDtoJsonConverter = contractDtoJsonConverter;
     }
 
     @PostConstruct//시스템 시작할 때 한번 시작
@@ -41,8 +45,11 @@ public class AICreateContract {
         }
     }
 
-    public String invokeClaude(String userChatLog) {
+    public String invokeClaude(String userChatLog, ContractDefaultReqeustDto reqeustDto) {
         String modelId = "apac.anthropic.claude-3-sonnet-20240229-v1:0";
+
+        String default_info = contractDtoJsonConverter.toJson(reqeustDto);
+        //System.out.println(default_info);
 
         JSONObject requestBody = new JSONObject();
         requestBody.put("anthropic_version", "bedrock-2023-05-31");
@@ -52,7 +59,7 @@ public class AICreateContract {
         JSONArray messages = new JSONArray();
         JSONObject userMessage = new JSONObject();
         userMessage.put("role", "user");
-        userMessage.put("content", userChatLog);
+        userMessage.put("content", userChatLog + default_info);
         messages.put(userMessage);
 
         requestBody.put("messages", messages);

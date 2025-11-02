@@ -26,6 +26,11 @@ public class ChatRoom {
     @Column(name = "buyer_id",nullable = false)
     private Long buyerId; // 구매자 ID
 
+
+    //상품 id 추가
+    @Column(name = "product_id", nullable = false)
+    private Long productId; // 상품 ID
+
     // ChatMessage와 1:N 관계, 방 번호로 채팅 내용 조회
     @OneToMany(mappedBy = "chatRoom", cascade = CascadeType.ALL)
     @Builder.Default
@@ -33,10 +38,11 @@ public class ChatRoom {
 
 
     //서비스에서 생성자 활용
-    public static ChatRoom create(Long sellerId, Long buyerId) {
+    public static ChatRoom create(Long sellerId, Long buyerId,Long productId) {
         ChatRoom room = new ChatRoom();
         room.sellerId = sellerId;
         room.buyerId = buyerId;
+        room.productId = productId;
         return room;
     }
 }

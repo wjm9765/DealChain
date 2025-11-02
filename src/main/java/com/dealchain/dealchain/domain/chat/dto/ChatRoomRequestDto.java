@@ -9,4 +9,5 @@ public class ChatRoomRequestDto {
     //private String roomID;
     private Long seller;
     private Long buyer;
+    private Long productId;
 }
