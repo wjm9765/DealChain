@@ -37,7 +37,8 @@ public class APIChatService {
         }
         ChatRoom newRoom = ChatRoom.create(
                 requestDto.getSeller(),
-                requestDto.getBuyer()
+                requestDto.getBuyer(),
+                requestDto.getProductId()
         );
         try{//채팅방 생성 성공
             chatRoomRepository.save(newRoom);
@@ -88,7 +89,7 @@ public class APIChatService {
         }
 
         List<chatRoomDto> dtos = rooms.stream()
-                .map(r -> new chatRoomDto(r.getRoomId(), r.getSellerId(), r.getBuyerId()))
+                .map(r -> new chatRoomDto(r.getRoomId(), r.getSellerId(), r.getBuyerId(),r.getProductId()))
                 .collect(Collectors.toList());
 
         return new ChatRoomListResponseDto(dtos, true, null);

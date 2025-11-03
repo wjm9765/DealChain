@@ -37,7 +37,7 @@ public class ContractDataSourceConfig {
 
         LocalContainerEntityManagerFactoryBean factory = new LocalContainerEntityManagerFactoryBean();
         factory.setDataSource(dataSource);
-        factory.setPackagesToScan("com.dealchain.dealchain.domain.contract"); // Contract Entities 스캔 경로
+        factory.setPackagesToScan("com.dealchain.dealchain.domain.contract.entity"); // Contract Entities 스캔 경로
 
         HibernateJpaVendorAdapter vendorAdapter = new HibernateJpaVendorAdapter();
         factory.setJpaVendorAdapter(vendorAdapter);
