@@ -128,6 +128,12 @@ public class ContractController {
                     requestDto.getDeviceInfo());
 
             // 3. Service의 비즈니스 로직 결과에 따라 응답
+
+            if(response.isBothSign()){
+                //json -> upload 함수로 호출
+                System.out.println("디버깅용 계약서 생성 호출 레이어");
+            }
+
             if (response.isSuccess()) {
                 return ResponseEntity.ok(response); // 서명 성공
             } else {

@@ -104,8 +104,11 @@ public class ContractService {
         }
         //3. isCompleted 함수로 COMPLETED 상태인지 확인 -> 그러면 json을 upload 함수로 전송
 
+
+        boolean BothSign = false;
         if (signTable.isCompleted()) {
          //json-> upload로 전송해 계약서 pdf 만들기
+            BothSign=true;
         }
         signRepository.save(signTable);
 
@@ -121,6 +124,7 @@ public class ContractService {
         return ContractResponseDto.builder()
                 .isSuccess(true)
                 .data("서명이 성공적으로 처리되었습니다.")
+                .bothSign(BothSign)
                 .build();
     }
 

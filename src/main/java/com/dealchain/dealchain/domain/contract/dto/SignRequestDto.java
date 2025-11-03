@@ -18,6 +18,7 @@ public class SignRequestDto
     @NotNull(message = "productId는 필수입니다.") // [보안] 널(null) 방어
     private Long productId;
 
-    @Column
+    @NotEmpty(message = "contract는 필수입니다.") // [보안] 널(null)과 빈 문자열("") 모두 방어
+    private String contract;
     private String deviceInfo;
 }
