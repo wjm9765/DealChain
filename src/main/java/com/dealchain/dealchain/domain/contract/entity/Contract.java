@@ -1,4 +1,4 @@
-package com.dealchain.dealchain.domain.contract;
+package com.dealchain.dealchain.domain.contract.entity;
 
 import jakarta.persistence.*;
 import lombok.Getter;

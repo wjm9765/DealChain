@@ -25,6 +25,13 @@ repositories {
 }
 
 dependencies {
+    // JSON 처리용
+    implementation 'org.json:json:20231013'
+    //Aws bedrock 의존성
+    implementation platform("software.amazon.awssdk:bom:2.21.33")
+    implementation 'software.amazon.awssdk:bedrockruntime'
+    implementation 'software.amazon.awssdk:auth'
+
     //postgresql의존성
     implementation 'org.postgresql:postgresql:42.6.0'
     //S3 의존성
