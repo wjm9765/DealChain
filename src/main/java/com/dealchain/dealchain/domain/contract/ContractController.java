@@ -17,6 +17,7 @@ import com.dealchain.dealchain.domain.member.Member;
 import com.dealchain.dealchain.domain.member.MemberRepository;
 import com.dealchain.dealchain.domain.product.Product;
 import com.dealchain.dealchain.domain.product.ProductService;
+import com.dealchain.dealchain.util.ByteArrayMultipartFile;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
@@ -148,8 +149,8 @@ public class ContractController {
                 Member buyer = memberRepository.findById(buyerId)
                         .orElseThrow(() -> new IllegalArgumentException("PDF 생성 실패: 구매자(ID:" + buyerId + ")를 찾을 수 없습니다."));
 
-                String sellerSignKey = seller.getSignatureImage(); //
-                String buyerSignKey = buyer.getSignatureImage();  //
+                String sellerSignKey = seller.getSignatureImage();
+                String buyerSignKey = buyer.getSignatureImage();
                 String aiJson = requestDto.getContract();
 
                 //json -> upload 함수로 호출
@@ -158,6 +159,29 @@ public class ContractController {
                         sellerSignKey,
                         buyerSignKey
                 );
+
+                //메모리에 저장된 pdf를 MultipartFile로 변환
+                MultipartFile finalPdfFile = new ByteArrayMultipartFile(
+                        pdfBytes,
+                        "contract-" + requestDto.getRoomId() + ".pdf",
+                        "application/pdf"
+                );
+
+
+                try{
+                    contractService.uploadAndSaveContract(finalPdfFile, sellerId, buyerId, roomId);
+
+                }
+                catch (Exception e){
+                    log.error("PDF 업로드 및 저장 실패: roomId: {}, error: {}", requestDto.getRoomId(), e.getMessage());
+                    response = SignResponseDto.builder()
+                            .isSuccess(false)
+                            .data("PDF 서버에 업로드 및 저장 중 오류가 발생했습니다.")
+                            .bothSign(true)
+                            .build();
+                    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+                }
+
             }
 
             if (response.isSuccess()) {

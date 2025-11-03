@@ -28,6 +28,8 @@ import java.io.FileOutputStream;//파일 저장을 위해 추가(테스트용)
 @Service
 public class JsonToPdfService {
 
+    private static final int MAX_JSON_SIZE = 5_242_880;//5MB
+
     private final XssSanitizer xssSanitizer;
     private final ObjectMapper objectMapper;
     private final S3UploadService s3UploadService;
@@ -65,7 +67,7 @@ public class JsonToPdfService {
     }
 
 
-    //나중에 삭제해야됨
+    //나중에 삭제해야됨,테스트용 함수
     private void savePdfToDesktopForTesting(byte[] pdfBytes) {
         try {
             // [보안] 'resources'가 아닌 '사용자 홈 디렉토리' (예: C:\Users\YourUser 또는 /home/YourUser)
@@ -101,6 +103,13 @@ public class JsonToPdfService {
     public byte[] createPdf(String aiContractJson,
                             String sellerSignatureKey,
                             String buyerSignatureKey) throws Exception {
+
+        if (aiContractJson == null || aiContractJson.length() > MAX_JSON_SIZE) {
+            log.error("DoS 공격 의심: AI JSON 크기가 {}바이트를 초과했습니다. (Size: {})",
+                    MAX_JSON_SIZE, (aiContractJson == null ? 0 : aiContractJson.length()));
+            throw new IllegalArgumentException("AI가 생성한 계약서 데이터가 너무 큽니다.");
+        }
+
 
         // --- 1. [보안] XSS 살균 (JSON -> 순수 텍스트 Map) ---
         Map<String, Object> contractMap = sanitizeJsonMap(aiContractJson);
@@ -173,9 +182,9 @@ public class JsonToPdfService {
             document.save(out);
 
             //나중에 삭제해야됨
-            byte[] pdfBytes = out.toByteArray();
-            savePdfToDesktopForTesting(pdfBytes);
-
+            //byte[] pdfBytes = out.toByteArray();
+            //savePdfToDesktopForTesting(pdfBytes);
+            //
             return out.toByteArray();
         } // document 닫기
     }
@@ -203,8 +212,6 @@ public class JsonToPdfService {
     }
 
 
-    // --- (sanitizeJsonMap, sanitizeMapRecursively 헬퍼 메서드는 이전과 동일) ---
-
     private Map<String, Object> sanitizeJsonMap(String jsonString) throws Exception {
         TypeReference<Map<String, Object>> typeRef = new TypeReference<>() {};
         Map<String, Object> map = objectMapper.readValue(jsonString, typeRef);
@@ -212,6 +219,7 @@ public class JsonToPdfService {
         return map;
     }
 
+    @SuppressWarnings("unchecked")
     private void sanitizeMapRecursively(Map<String, Object> map) {
         for (Map.Entry<String, Object> entry : map.entrySet()) {
             Object value = entry.getValue();
@@ -222,6 +230,19 @@ public class JsonToPdfService {
             }
         }
     }
+
+
+//    //map 데이터 타입 강제 변환 예외처리
+//    private void sanitizeMapRecursively(Map<String, Object> map) {
+//        for (Map.Entry<String, Object> entry : map.entrySet()) {
+//            Object value = entry.getValue();
+//            if (value instanceof String) {
+//                entry.setValue(xssSanitizer.sanitizeToPlainText((String) value));
+//            } else if (value instanceof Map) {
+//                sanitizeMapRecursively((Map<String, Object>) value);
+//            }
+//        }
+//    }
 
     // --- PDF 텍스트 그리기를 위한 NPE-Safe 헬퍼 메서드들 ---
 
@@ -280,6 +301,6 @@ public class JsonToPdfService {
             Map<String, Object> nestedMap = (Map<String, Object>) val;
             return nestedMap;
         }
-        return Collections.emptyMap(); // 👈 null 대신 빈 Map을 반환하여 NPE 방지
+        return Collections.emptyMap();
     }
 }
