@@ -6,6 +6,8 @@ import com.dealchain.dealchain.domain.chat.entity.ChatRoom;
 import com.dealchain.dealchain.domain.chat.repository.ChatRoomRepository;
 import com.dealchain.dealchain.domain.contract.SignRepository;
 import com.dealchain.dealchain.domain.contract.dto.ContractResponseDto;
+import com.dealchain.dealchain.domain.contract.dto.SignRequestDto;
+import com.dealchain.dealchain.domain.contract.dto.SignResponseDto;
 import com.dealchain.dealchain.domain.contract.entity.Contract;
 import com.dealchain.dealchain.domain.contract.ContractRepository;
 import com.dealchain.dealchain.domain.contract.entity.SignTable;
@@ -72,9 +74,9 @@ public class ContractService {
 
     //사인 요청이 들어오면 서명하는 함수
     @Transactional
-    public ContractResponseDto signContract(String roomId,Long productId,Long userId,String role,String deviceInfo) {
+    public SignResponseDto signContract(String roomId, Long productId, Long userId, String role, String deviceInfo) {
         if (roomId == null || roomId.isBlank() || productId == null || userId == null || role == null||deviceInfo==null) {
-            return ContractResponseDto.builder()
+            return SignResponseDto.builder()
                     .isSuccess(false)
                     .data("BadRequest: 필수 파라미터 누락")
                     .build();
@@ -83,7 +85,7 @@ public class ContractService {
         //1. 기존 서명 테이블에 있는 항목을 불러옴
         Optional<SignTable> signOpt = signRepository.findByRoomIdAndProductId(roomId, productId);
         if (signOpt.isEmpty()) {
-            return ContractResponseDto.builder()
+            return SignResponseDto.builder()
                     .isSuccess(false)
                     .data("NotFound: SignTable이 존재하지 않습니다.")
                     .build();
@@ -97,7 +99,7 @@ public class ContractService {
         } else if ("BUYER".equalsIgnoreCase(role)) {
             signTable.signByBuyer();
         } else {
-            return ContractResponseDto.builder()
+            return SignResponseDto.builder()
                     .isSuccess(false)
                     .data("BadRequest: role은 SELLER 또는 BUYER 여야 합니다.")
                     .build();
@@ -121,7 +123,7 @@ public class ContractService {
                 .build();
         dealTrackingService.dealTrack("SIGN", request);
 
-        return ContractResponseDto.builder()
+        return SignResponseDto.builder()
                 .isSuccess(true)
                 .data("서명이 성공적으로 처리되었습니다.")
                 .bothSign(BothSign)
