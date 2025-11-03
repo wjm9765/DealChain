@@ -86,6 +86,20 @@ public class SignTable {
         }
     }
 
+    //수정 요청했을 때, 판매자/구매자 서명 취소 함수
+    public void undoSignBySeller() {
+        if (this.sellerSignedAt != null) {
+            this.sellerSignedAt = null;
+            this.status = SignStatus.PENDING_BOTH;
+        }
+    }
+    public void undoSignByBuyer() {
+        if (this.buyerSignedAt != null) {
+            this.buyerSignedAt = null;
+            this.status = SignStatus.PENDING_BOTH;
+        }
+    }
+
     //서명 상태 업데이트 함수
     private void updateStatus() {
         boolean sellerSigned = (this.sellerSignedAt != null);
