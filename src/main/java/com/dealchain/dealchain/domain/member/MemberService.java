@@ -1,5 +1,7 @@
 package com.dealchain.dealchain.domain.member;
 
+import com.dealchain.dealchain.domain.api.VerifyService;
+import com.dealchain.dealchain.domain.api.dto.VerifyResponseDto;
 import com.dealchain.dealchain.domain.security.S3UploadService;
 import com.dealchain.dealchain.util.EncryptionUtil;
 import org.springframework.stereotype.Service;
@@ -14,16 +16,33 @@ public class MemberService {
     private final MemberRepository memberRepository;
     private final EncryptionUtil encryptionUtil;
     private final S3UploadService s3UploadService;
+    private final VerifyService verifyService;
 
-    public MemberService(MemberRepository memberRepository, EncryptionUtil encryptionUtil, S3UploadService s3UploadService) {
+    public MemberService(MemberRepository memberRepository, EncryptionUtil encryptionUtil, S3UploadService s3UploadService, VerifyService verifyService) {
         this.memberRepository = memberRepository;
         this.encryptionUtil = encryptionUtil;
         this.s3UploadService = s3UploadService;
+        this.verifyService = verifyService;
     }
 
     // 회원가입 (서명 이미지 포함)
     public Member register(String name, String residentNumber, String phoneNumber, String signatureImage) {
         try {
+            // 본인 인증 수행
+            VerifyResponseDto verifyResponse;
+            try {
+                verifyResponse = verifyService.verify(name, phoneNumber, residentNumber);
+            } catch (RuntimeException e) {
+                throw new IllegalArgumentException("인증 실패: 유저 정보를 찾을 수 없습니다", e);
+            }
+            
+            if (verifyResponse == null || !verifyResponse.getSuccess()) {
+                String errorMessage = verifyResponse != null && verifyResponse.getMessage() != null 
+                    ? verifyResponse.getMessage() 
+                    : "인증 실패: 유저 정보를 찾을 수 없습니다";
+                throw new IllegalArgumentException(errorMessage);
+            }
+
             // 이름/주민번호/전화번호 암호화
             String encryptedName = encryptionUtil.encryptString(name);
             String encryptedResidentNumber = encryptionUtil.encryptString(residentNumber);
@@ -36,6 +55,8 @@ public class MemberService {
 
             Member member = new Member(encryptedName, encryptedResidentNumber, encryptedPhoneNumber, signatureImage);
             return memberRepository.save(member);
+        } catch (IllegalArgumentException e) {
+            throw e;
         } catch (Exception e) {
             throw new RuntimeException("회원가입 중 오류가 발생했습니다.", e);
         }
@@ -44,6 +65,20 @@ public class MemberService {
     //회원가입 - 서명이미지를 s3에 저장
     public Member register(String name, String residentNumber, String phoneNumber, MultipartFile signatureFile) {
         try {
+            // 본인 인증 수행
+            VerifyResponseDto verifyResponse;
+            try {
+                verifyResponse = verifyService.verify(name, phoneNumber, residentNumber);
+            } catch (RuntimeException e) {
+                throw new IllegalArgumentException("인증 실패: 유저 정보를 찾을 수 없습니다", e);
+            }
+            
+            if (verifyResponse == null || !verifyResponse.getSuccess()) {
+                String errorMessage = verifyResponse != null && verifyResponse.getMessage() != null 
+                    ? verifyResponse.getMessage() 
+                    : "인증 실패: 유저 정보를 찾을 수 없습니다";
+                throw new IllegalArgumentException(errorMessage);
+            }
 
             String encryptedName = encryptionUtil.encryptString(name);
             String encryptedResidentNumber = encryptionUtil.encryptString(residentNumber);
