@@ -9,6 +9,8 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+import jakarta.servlet.http.HttpServletResponse;
+
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
@@ -19,19 +21,42 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                .authorizeHttpRequests(authz -> authz
-                        // 모든 요청 허용
-                        .requestMatchers("/h2-console/**").permitAll()
-                        // 회원 관련 API는 인증 없이 접근 가능
-                        .requestMatchers("/api/members/**").permitAll()
-                        // 상품 등록, 삭제는 인증 필요
-                        .requestMatchers("/api/products/create", "/api/products/*/delete").authenticated()
-                        // 상품 조회는 인증 없이 접근 가능
-                        .requestMatchers("/api/products/**").permitAll()
-                        .anyRequest().permitAll()
-                )
                 .csrf(csrf -> csrf.disable())
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .sessionManagement(session -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                )
+                .anonymous(anonymous -> anonymous.disable())
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint((request, response, authException) -> {
+                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                            response.setContentType("application/json;charset=UTF-8");
+                            response.getWriter().write("{\"success\":false,\"message\":\"인증이 필요합니다.\"}");
+                        })
+                )
+                .authorizeHttpRequests(authz -> authz
+                        // permitAll 경로 먼저 명시 (더 구체적인 경로부터)
+                        .requestMatchers("/api/members/register").permitAll()
+                        .requestMatchers("/api/members/login").permitAll()
+                        .requestMatchers("/api/members/logout").permitAll()
+                        .requestMatchers("/ws/**", "/ws").permitAll()
+                        .requestMatchers("/static/**", "/uploads/**").permitAll()
+                        
+                        // authenticated 경로 명시 (더 구체적인 경로부터)
+                        .requestMatchers("/api/members/**").authenticated()
+                        .requestMatchers("/api/products/create").authenticated()
+                        .requestMatchers("/api/products/{id}/**").authenticated()
+                        .requestMatchers("/api/products/{id}").authenticated()
+                        .requestMatchers("/api/products/list").authenticated()
+                        .requestMatchers("/api/products/member/**").authenticated()
+                        .requestMatchers("/api/contracts/sign").authenticated()
+                        .requestMatchers("/api/contracts/create").authenticated()
+                        .requestMatchers("/api/contracts/upload").authenticated()
+                        .requestMatchers("/api/contracts/{id}").authenticated()
+                        .requestMatchers("/api/chat/**").authenticated()
+                        
+                        // 마지막에 anyRequest
+                        .anyRequest().authenticated()
+                )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
