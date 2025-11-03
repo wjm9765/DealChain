@@ -1,9 +1,15 @@
-package com.dealchain.dealchain.domain.contract;
+package com.dealchain.dealchain.domain.contract.service;
 
 import com.dealchain.dealchain.domain.DealTracking.dto.DealTrackingRequest;
 import com.dealchain.dealchain.domain.DealTracking.service.DealTrackingService;
 import com.dealchain.dealchain.domain.chat.entity.ChatRoom;
 import com.dealchain.dealchain.domain.chat.repository.ChatRoomRepository;
+import com.dealchain.dealchain.domain.contract.SignRepository;
+import com.dealchain.dealchain.domain.contract.dto.ContractResponseDto;
+import com.dealchain.dealchain.domain.contract.entity.Contract;
+import com.dealchain.dealchain.domain.contract.ContractRepository;
+import com.dealchain.dealchain.domain.contract.entity.SignTable;
+import com.dealchain.dealchain.domain.product.Product;
 import com.dealchain.dealchain.domain.security.HashService;
 import com.dealchain.dealchain.domain.security.S3UploadService;
 import com.dealchain.dealchain.util.EncryptionUtil;
@@ -25,12 +31,14 @@ public class ContractService {
     private final EncryptionUtil encryptionUtil;
     private final DealTrackingService dealTrackingService;
     private final ChatRoomRepository chatRoomRepository;
+    private final SignRepository signRepository;
 
     public ContractService(ContractRepository contractRepository, 
                           S3UploadService s3UploadService,
                           HashService hashService,
                           EncryptionUtil encryptionUtil,
                           DealTrackingService dealTrackingService,
+                          SignRepository signRepository,
                           ChatRoomRepository chatRoomRepository) {
         this.contractRepository = contractRepository;
         this.s3UploadService = s3UploadService;
@@ -38,7 +46,85 @@ public class ContractService {
         this.encryptionUtil = encryptionUtil;
         this.dealTrackingService = dealTrackingService;
         this.chatRoomRepository = chatRoomRepository;
+        this.signRepository= signRepository;
     }
+
+   @Transactional
+    public SignTable createInitialSignIfNotExists(String roomId, Product product) {
+        if (product == null) {
+            throw new IllegalArgumentException("Product가 필요합니다.");
+        }
+        // 중복 방지
+        Optional<SignTable> existing = signRepository.findByRoomIdAndProductId(roomId, product.getId());
+        if (existing.isPresent()) {
+            return existing.get(); // 이미 있으면 기존 객체 반환
+        }
+
+        SignTable signTable = SignTable.builder()
+                .roomId(roomId)
+                .productId(product.getId())
+                .build();
+
+        return signRepository.save(signTable); // 저장 후 영속화된 엔티티 반환
+    }
+
+
+
+    //사인 요청이 들어오면 서명하는 함수
+    @Transactional
+    public ContractResponseDto signContract(String roomId,Long productId,Long userId,String role,String deviceInfo) {
+        if (roomId == null || roomId.isBlank() || productId == null || userId == null || role == null||deviceInfo==null) {
+            return ContractResponseDto.builder()
+                    .isSuccess(false)
+                    .data("BadRequest: 필수 파라미터 누락")
+                    .build();
+        }
+        //role은 SELLER,BUYER
+        //1. 기존 서명 테이블에 있는 항목을 불러옴
+        Optional<SignTable> signOpt = signRepository.findByRoomIdAndProductId(roomId, productId);
+        if (signOpt.isEmpty()) {
+            return ContractResponseDto.builder()
+                    .isSuccess(false)
+                    .data("NotFound: SignTable이 존재하지 않습니다.")
+                    .build();
+        }
+        SignTable signTable = signOpt.get();
+
+        //2. 서명 상태 업데이트 (엔티티에 있는 함수 사용) JPA가 자동 업데이트
+        // 역할 판별 (대소문자 무시)
+        if ("SELLER".equalsIgnoreCase(role)) {
+            signTable.signBySeller();
+        } else if ("BUYER".equalsIgnoreCase(role)) {
+            signTable.signByBuyer();
+        } else {
+            return ContractResponseDto.builder()
+                    .isSuccess(false)
+                    .data("BadRequest: role은 SELLER 또는 BUYER 여야 합니다.")
+                    .build();
+        }
+        //3. isCompleted 함수로 COMPLETED 상태인지 확인 -> 그러면 json을 upload 함수로 전송
+
+        if (signTable.isCompleted()) {
+         //json-> upload로 전송해 계약서 pdf 만들기
+        }
+        signRepository.save(signTable);
+
+
+        //4. 거래 추적 테이블 작성
+        DealTrackingRequest request = DealTrackingRequest.builder()
+                .roomId(String.valueOf(roomId))
+                .role(role)
+                .deviceInfo(deviceInfo)
+                .build();
+        dealTrackingService.dealTrack("SIGN", request);
+
+        return ContractResponseDto.builder()
+                .isSuccess(true)
+                .data("서명이 성공적으로 처리되었습니다.")
+                .build();
+    }
+
+
 
     /**
      * PDF 파일을 S3에 업로드하고 경로를 RDS에 저장합니다.

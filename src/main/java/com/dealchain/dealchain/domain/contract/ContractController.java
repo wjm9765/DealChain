@@ -3,23 +3,31 @@ package com.dealchain.dealchain.domain.contract;
 import com.dealchain.dealchain.domain.AI.dto.ContractDefaultReqeustDto;
 import com.dealchain.dealchain.domain.AI.service.AICreateContract;
 import com.dealchain.dealchain.domain.AI.service.ChatPaser;
-import com.dealchain.dealchain.domain.DealTracking.service.DealTrackingService;
 import com.dealchain.dealchain.domain.chat.repository.ChatRoomRepository;
 import com.dealchain.dealchain.domain.contract.dto.ContractCreateRequestDto;
 import com.dealchain.dealchain.domain.contract.dto.ContractResponseDto;
+import com.dealchain.dealchain.domain.contract.dto.SignRequestDto;
+import com.dealchain.dealchain.domain.contract.entity.Contract;
+import com.dealchain.dealchain.domain.contract.entity.SignTable;
+import com.dealchain.dealchain.domain.contract.service.ContractService;
 import com.dealchain.dealchain.domain.product.Product;
 import com.dealchain.dealchain.domain.product.ProductService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @RestController
 @RequestMapping("/api/contracts")
@@ -29,6 +37,9 @@ public class ContractController {
     private final AICreateContract AICreateContract;
     private final ProductService productService;
     private final ChatRoomRepository chatRoomRepository;
+
+    private static final Logger log = LoggerFactory.getLogger(ContractController.class);//로그용
+
     @Autowired // (Spring 4.3+ 부터 생성자가 1개면 @Autowired 생략 가능)
     public ContractController(ContractService contractService,
                               AICreateContract aiCreateContract,
@@ -42,6 +53,104 @@ public class ContractController {
         this.productService = productService;
         this.chatRoomRepository = chatRoomRepository;
     }
+
+
+    //사용자가 서명을 요청함
+    @PostMapping("/sign")
+    public ResponseEntity<ContractResponseDto> signContract(
+            @Valid @RequestBody SignRequestDto requestDto) {
+
+        try {
+
+            //로그인 토큰 정보에서 사용자 아이디 가져오기
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth == null || !auth.isAuthenticated()) {
+                ContractResponseDto resp = ContractResponseDto.builder()
+                        .isSuccess(false)
+                        .data("Unauthorized: 인증 정보가 없습니다.")
+                        .build();
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(resp);
+            }
+            Long userId;
+            try {
+                //로그인 토큰 정보에서 사용자 아이디 가져옴;
+                userId = Long.parseLong(auth.getName());
+            } catch (NumberFormatException ex) {
+                ContractResponseDto resp = ContractResponseDto.builder()
+                        .isSuccess(false)
+                        .data("Unauthorized: 사용자 ID 파싱 실패.")
+                        .build();
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(resp);
+            }
+
+            //2) roomId로 chatRoom 조회,잘못된 요청이면 에러 반환
+            String roomId = requestDto.getRoomId();
+            if (roomId == null || roomId.isEmpty()) {
+                ContractResponseDto resp = ContractResponseDto.builder()
+                        .isSuccess(false)
+                        .data("BadRequest: roomId가 필요합니다.")
+                        .build();
+                return ResponseEntity.badRequest().body(resp);
+            }
+            Optional<com.dealchain.dealchain.domain.chat.entity.ChatRoom> roomOpt = chatRoomRepository.findById(roomId);
+            if (roomOpt.isEmpty()) {
+                ContractResponseDto resp = ContractResponseDto.builder()
+                        .isSuccess(false)
+                        .data("NotFound: 해당 roomId가 존재하지 않습니다.")
+                        .build();
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(resp);
+            }
+
+            com.dealchain.dealchain.domain.chat.entity.ChatRoom room = roomOpt.get();
+
+            // 3) 해당 userId가 sellerId인지 buyerId인지 확인
+            Long sellerId = room.getSellerId();
+            Long buyerId = room.getBuyerId();
+            //해당 userId가 판매자 구매자인지 확인
+            String role;
+            if (sellerId != null && sellerId.equals(userId)) {
+                role = "SELLER";
+            } else if (buyerId != null && buyerId.equals(userId)) {
+                role = "BUYER";
+            } else {
+                ContractResponseDto resp = ContractResponseDto.builder()
+                        .isSuccess(false)
+                        .data("Forbidden: 사용자가 거래 당사자가 아닙니다.")
+                        .build();
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(resp);
+            }
+
+            // 위에서 검증한 데이터로 서비스 레이어 호출
+            ContractResponseDto response = contractService.signContract(requestDto.getRoomId(),
+                    requestDto.getProductId(),
+                    userId,
+                    role,
+                    requestDto.getDeviceInfo());
+
+            // 3. Service의 비즈니스 로직 결과에 따라 응답
+            if (response.isSuccess()) {
+                return ResponseEntity.ok(response); // 서명 성공
+            } else {
+                return ResponseEntity.badRequest().body(response); // 서명 실패 (400)
+            }
+
+        } catch (IllegalArgumentException e) { // Service가 "계약서 없음" (404)
+            log.warn("Sign failed: Resource not found. (roomId: {}) - {}", requestDto.getRoomId(), e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ContractResponseDto.builder().isSuccess(false).data(e.getMessage()).build());
+
+        } catch (SecurityException e) { // Service가 "권한 없음" (403)
+            log.warn("Sign failed: Authorization failed. (roomId: {}) - {}", requestDto.getRoomId(), e.getMessage());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(ContractResponseDto.builder().isSuccess(false).data(e.getMessage()).build());
+
+        } catch (Exception e) { // 그 외 모든 서버 오류 (500)
+            log.error("Sign failed: Internal server error. (roomId: {})", requestDto.getRoomId(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ContractResponseDto.builder().isSuccess(false).data(null).build());
+        }
+    }
+
     /**
      * PDF 파일을 업로드하여 S3에 저장하고 경로를 RDS에 저장합니다.
      *
@@ -170,7 +279,8 @@ public class ContractController {
                     .data(aiContractJson) // AI가 생성한 JSON 문자열
                     .build();
 
-
+            //4. 서명 테이블에 초기 데이터 생성 (서명 상태: 양측 서명 대기)
+            contractService.createInitialSignIfNotExists(roomId,product);
             return ResponseEntity.ok(successResponse);
 
         } catch (Exception e) {

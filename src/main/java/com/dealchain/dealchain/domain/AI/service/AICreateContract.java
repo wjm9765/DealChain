@@ -2,7 +2,6 @@
 package com.dealchain.dealchain.domain.AI.service;
 
 import com.dealchain.dealchain.domain.AI.dto.ContractDefaultReqeustDto;
-import com.dealchain.dealchain.domain.contract.Contract;
 import jakarta.annotation.PostConstruct;
 import org.json.JSONArray;
 import org.json.JSONObject;
