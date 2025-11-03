@@ -12,5 +12,5 @@ import lombok.NoArgsConstructor;
 public class ContractResponseDto {
     private boolean isSuccess;
     private String data;//json 형태로 계약서 데이터를 담음
-    private boolean bothSign;
+
 }

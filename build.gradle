@@ -25,6 +25,8 @@ repositories {
 }
 
 dependencies {
+    //pdf 생성
+    implementation 'org.apache.pdfbox:pdfbox:3.0.2'
     // JSON 처리용
     implementation 'org.json:json:20231013'
     //Aws bedrock 의존성
