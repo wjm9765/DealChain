@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>본인인증</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            font-weight: 600;
+            display: none;
+        }
+
+        .result.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .result.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>본인인증</h1>
+        <form id="verifyForm">
+            <div class="form-group">
+                <label for="name">이름</label>
+                <input type="text" id="name" name="name" required placeholder="이름을 입력하세요">
+            </div>
+            <div class="form-group">
+                <label for="phoneNumber">휴대폰 번호</label>
+                <input type="text" id="phoneNumber" name="phoneNumber" required placeholder="010-1234-5678" maxlength="13">
+            </div>
+            <div class="form-group">
+                <label for="residentNumber">주민번호</label>
+                <input type="text" id="residentNumber" name="residentNumber" required placeholder="123456-1234567" maxlength="14">
+            </div>
+            <button type="submit">인증하기</button>
+        </form>
+        <div id="result" class="result"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 전화번호 포맷팅 함수 (000-0000-0000 형식)
+            function formatPhoneNumber(value) {
+                // 숫자만 추출
+                const numbers = value.replace(/\D/g, '');
+                
+                // 길이 제한
+                const limitedNumbers = numbers.slice(0, 11);
+                
+                // 길이에 따라 포맷팅
+                if (limitedNumbers.length <= 3) {
+                    return limitedNumbers;
+                } else if (limitedNumbers.length <= 7) {
+                    return limitedNumbers.slice(0, 3) + '-' + limitedNumbers.slice(3);
+                } else {
+                    return limitedNumbers.slice(0, 3) + '-' + limitedNumbers.slice(3, 7) + '-' + limitedNumbers.slice(7);
+                }
+            }
+
+            // 주민번호 포맷팅 함수 (000000-0000000 형식)
+            function formatResidentNumber(value) {
+                // 숫자만 추출
+                const numbers = value.replace(/\D/g, '');
+                
+                // 길이 제한
+                const limitedNumbers = numbers.slice(0, 13);
+                
+                // 길이에 따라 포맷팅
+                if (limitedNumbers.length <= 6) {
+                    return limitedNumbers;
+                } else {
+                    return limitedNumbers.slice(0, 6) + '-' + limitedNumbers.slice(6);
+                }
+            }
+
+            // 전화번호 입력 필드
+            const phoneNumberInput = document.getElementById('phoneNumber');
+            phoneNumberInput.addEventListener('input', function(e) {
+                const input = e.target;
+                const value = input.value;
+                const cursorPosition = input.selectionStart;
+                
+                // 현재 커서 위치까지의 숫자 개수 계산
+                const beforeCursor = value.substring(0, cursorPosition);
+                const numbersBeforeCursor = beforeCursor.replace(/\D/g, '').length;
+                
+                // 포맷팅 적용
+                const newValue = formatPhoneNumber(value);
+                
+                // 값이 변경되었을 때만 업데이트
+                if (newValue !== value) {
+                    input.value = newValue;
+                    
+                    // 새로운 커서 위치 계산 (숫자 개수 기준)
+                    let newCursorPosition = newValue.length;
+                    let numberCount = 0;
+                    for (let i = 0; i < newValue.length; i++) {
+                        if (/\d/.test(newValue[i])) {
+                            numberCount++;
+                            if (numberCount >= numbersBeforeCursor) {
+                                newCursorPosition = i + 1;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // 커서 위치 설정
+                    setTimeout(() => {
+                        input.setSelectionRange(newCursorPosition, newCursorPosition);
+                    }, 0);
+                }
+            });
+
+            // 주민번호 입력 필드
+            const residentNumberInput = document.getElementById('residentNumber');
+            residentNumberInput.addEventListener('input', function(e) {
+                const input = e.target;
+                const value = input.value;
+                const cursorPosition = input.selectionStart;
+                
+                // 현재 커서 위치까지의 숫자 개수 계산
+                const beforeCursor = value.substring(0, cursorPosition);
+                const numbersBeforeCursor = beforeCursor.replace(/\D/g, '').length;
+                
+                // 포맷팅 적용
+                const newValue = formatResidentNumber(value);
+                
+                // 값이 변경되었을 때만 업데이트
+                if (newValue !== value) {
+                    input.value = newValue;
+                    
+                    // 새로운 커서 위치 계산 (숫자 개수 기준)
+                    let newCursorPosition = newValue.length;
+                    let numberCount = 0;
+                    for (let i = 0; i < newValue.length; i++) {
+                        if (/\d/.test(newValue[i])) {
+                            numberCount++;
+                            if (numberCount >= numbersBeforeCursor) {
+                                newCursorPosition = i + 1;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // 커서 위치 설정
+                    setTimeout(() => {
+                        input.setSelectionRange(newCursorPosition, newCursorPosition);
+                    }, 0);
+                }
+            });
+
+            // 숫자만 입력되도록 제한
+            phoneNumberInput.addEventListener('keypress', function(e) {
+                if (e.key && !/[0-9]/.test(e.key)) {
+                    e.preventDefault();
+                } else if (e.which && !/[0-9]/.test(String.fromCharCode(e.which))) {
+                    e.preventDefault();
+                }
+            });
+
+            residentNumberInput.addEventListener('keypress', function(e) {
+                if (e.key && !/[0-9]/.test(e.key)) {
+                    e.preventDefault();
+                } else if (e.which && !/[0-9]/.test(String.fromCharCode(e.which))) {
+                    e.preventDefault();
+                }
+            });
+        });
+
+        document.getElementById('verifyForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const name = document.getElementById('name').value;
+            const phoneNumber = document.getElementById('phoneNumber').value;
+            const residentNumber = document.getElementById('residentNumber').value;
+            
+            const resultDiv = document.getElementById('result');
+            resultDiv.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/verify', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        name: name,
+                        phoneNumber: phoneNumber,
+                        residentNumber: residentNumber
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.style.display = 'block';
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = data.message;
+                    
+                    // 성공 시 redirect
+                    if (data.redirectUrl) {
+                        setTimeout(() => {
+                            window.location.href = data.redirectUrl;
+                        }, 1000);
+                    }
+                } else {
+                    resultDiv.style.display = 'block';
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = data.message;
+                }
+            } catch (error) {
+                resultDiv.style.display = 'block';
+                resultDiv.className = 'result error';
+                resultDiv.textContent = '오류가 발생했습니다: ' + error.message;
+            }
+        });
+    </script>
+</body>
+</html>
+

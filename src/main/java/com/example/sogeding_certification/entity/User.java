@@ -11,6 +11,7 @@ public class User {
     private String name;
     private String phoneNumber;
     private String residentNumber;
+    private Long ci;
 }
 
 

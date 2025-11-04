@@ -10,6 +10,9 @@ import lombok.NoArgsConstructor;
 public class UserResponse {
     private boolean success;
     private String message;
+    private String redirectUrl;
+    private String name;
+    private Long ci;
 }
 
 
