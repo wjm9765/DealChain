@@ -31,12 +31,12 @@ public class MemberController {
     @Autowired
     private S3UploadService s3UploadService;
 
-    // 회원가입 API (이미지 포함) - 이미지 파일을 로컬에 저장하지 않고 서비스로 전달
+    // 회원가입 API (이미지 포함) - id, password, token, signatureImage 받음
     @PostMapping("/register")
     public ResponseEntity<Map<String, Object>> register(
-            @RequestParam("name") String name,
-            @RequestParam("residentNumber") String residentNumber,
-            @RequestParam("phoneNumber") String phoneNumber,
+            @RequestParam("id") String id,
+            @RequestParam("password") String password,
+            @RequestParam("token") String token,
             @RequestParam(value = "signatureImage", required = false) MultipartFile signatureImage) {
         try {
             if (signatureImage == null || signatureImage.isEmpty()) {
@@ -47,13 +47,13 @@ public class MemberController {
             }
 
             // 서명 이미지를 로컬에 저장하지 않고 그대로 서비스 계층으로 전달
-            Member member = memberService.register(name, residentNumber, phoneNumber, signatureImage);
+            Member member = memberService.register(id, password, token, signatureImage);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("message", "회원가입이 완료되었습니다.");
-            response.put("memberId", member.getId());
-            response.put("name", member.getName());
+            response.put("memberId", member.getMemberId());
+            response.put("id", member.getId());
             response.put("signatureImage", member.getSignatureImage());
 
             return ResponseEntity.ok(response);
@@ -75,10 +75,10 @@ public class MemberController {
     public ResponseEntity<Map<String, Object>> login(@Valid @RequestBody MemberLoginRequestDto requestDto,
                                                       HttpServletResponse response) {
         try {
-            Member member = memberService.login(requestDto.getName(), requestDto.getResidentNumber(), requestDto.getPhoneNumber());
+            Member member = memberService.login(requestDto.getId(), requestDto.getPassword());
             
             // JWT 토큰 생성
-            String token = jwtUtil.generateToken(member.getId(), member.getName());
+            String token = jwtUtil.generateToken(member.getMemberId(), member.getId());
 
             // HttpOnly Cookie 설정
             Cookie cookie = new Cookie("token", token);
@@ -92,8 +92,8 @@ public class MemberController {
             Map<String, Object> responseBody = new HashMap<>();
             responseBody.put("success", true);
             responseBody.put("message", "로그인 성공");
-            responseBody.put("memberId", member.getId());
-            responseBody.put("name", member.getName());
+            responseBody.put("memberId", member.getMemberId());
+            responseBody.put("id", member.getId());
 
             return ResponseEntity.ok(responseBody);
         } catch (IllegalArgumentException e) {
@@ -121,18 +121,19 @@ public class MemberController {
     }
 
     // 회원 정보 조회 API
-    @GetMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> getMember(@PathVariable("id") Long id) {
+    @GetMapping("/{memberId}")
+    public ResponseEntity<Map<String, Object>> getMember(@PathVariable("memberId") Long memberId) {
         try {
-            Member member = memberService.findById(id);
+            Member member = memberService.findById(memberId);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             Map<String, Object> memberInfo = new HashMap<>();
+            memberInfo.put("memberId", member.getMemberId());
             memberInfo.put("id", member.getId());
-            memberInfo.put("name", member.getName());
-            memberInfo.put("residentNumber", member.getResidentNumber());
-            memberInfo.put("phoneNumber", member.getPhoneNumber());
+            memberInfo.put("password", member.getPassword());
+            memberInfo.put("name", member.getName() != null ? member.getName() : "");
+            memberInfo.put("ci", member.getCi() != null ? member.getCi() : "");
             memberInfo.put("signatureImage", member.getSignatureImage() != null ? member.getSignatureImage() : "");
 
             response.put("member", memberInfo);
