@@ -10,7 +10,6 @@ import com.dealchain.dealchain.domain.contract.dto.ContractResponseDto;
 import com.dealchain.dealchain.domain.contract.dto.SignRequestDto;
 import com.dealchain.dealchain.domain.contract.dto.SignResponseDto;
 import com.dealchain.dealchain.domain.contract.entity.Contract;
-import com.dealchain.dealchain.domain.contract.entity.SignTable;
 import com.dealchain.dealchain.domain.contract.service.ContractService;
 import com.dealchain.dealchain.domain.contract.service.JsonToPdfService;
 import com.dealchain.dealchain.domain.member.Member;
@@ -18,7 +17,6 @@ import com.dealchain.dealchain.domain.member.MemberRepository;
 import com.dealchain.dealchain.domain.product.Product;
 import com.dealchain.dealchain.domain.product.ProductService;
 import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -46,7 +44,6 @@ public class ContractController {
     private final MemberRepository memberRepository;
     private static final Logger log = LoggerFactory.getLogger(ContractController.class);
 
-    @Autowired
     public ContractController(ContractService contractService,
                               AICreateContract aiCreateContract,
                               ChatPaser chatPaser,

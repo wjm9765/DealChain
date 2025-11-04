@@ -5,8 +5,6 @@ import com.dealchain.dealchain.domain.DealTracking.service.DealTrackingService;
 import com.dealchain.dealchain.domain.chat.entity.ChatRoom;
 import com.dealchain.dealchain.domain.chat.repository.ChatRoomRepository;
 import com.dealchain.dealchain.domain.contract.SignRepository;
-import com.dealchain.dealchain.domain.contract.dto.ContractResponseDto;
-import com.dealchain.dealchain.domain.contract.dto.SignRequestDto;
 import com.dealchain.dealchain.domain.contract.dto.SignResponseDto;
 import com.dealchain.dealchain.domain.contract.entity.Contract;
 import com.dealchain.dealchain.domain.contract.ContractRepository;

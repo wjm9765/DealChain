@@ -16,16 +16,15 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
-@Service // DealTrackingService로 이름을 바꾸는 것을 추천합니다.
-@RequiredArgsConstructor // Lombok으로 final 필드 자동 주입
-public class DealTrackingService { // 클래스 이름 수정 제안
+@Service
+@RequiredArgsConstructor
+public class DealTrackingService {
 
     private final DealTrackingRepository dealTrackingRepository;
     private final HashService hashService;
     private final ChatRoomRepository chatRoomRepository;
 
-    // 함수 호출 전 토큰 인증 처리 완료
-    @Transactional(transactionManager = "dealTransactionManager") // DB 처리를 위해 트랜잭션 적용
+    @Transactional(transactionManager = "dealTransactionManager")
     public void dealTrack(String type, DealTrackingRequest request) {
 
         // 1. 인증된 토큰에서 사용자 아이디를 가져옴

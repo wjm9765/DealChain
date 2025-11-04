@@ -13,7 +13,6 @@ import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
@@ -35,11 +34,9 @@ public class JsonToPdfService {
 
     // A4 페이지 크기 (pt)
     private static final float PAGE_WIDTH = PDRectangle.A4.getWidth();
-    private static final float PAGE_HEIGHT = PDRectangle.A4.getHeight();
     private static final float MARGIN_X = 70;
     private static final float MARGIN_TOP = 780; // (페이지 상단 Y 좌표)
 
-    @Autowired
     public JsonToPdfService(XssSanitizer xssSanitizer,
                             ObjectMapper objectMapper,
                             S3UploadService s3UploadService) {
