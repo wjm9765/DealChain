@@ -10,7 +10,6 @@ import com.dealchain.dealchain.domain.contract.dto.ContractResponseDto;
 import com.dealchain.dealchain.domain.contract.dto.SignRequestDto;
 import com.dealchain.dealchain.domain.contract.dto.SignResponseDto;
 import com.dealchain.dealchain.domain.contract.entity.Contract;
-import com.dealchain.dealchain.domain.contract.entity.SignTable;
 import com.dealchain.dealchain.domain.contract.service.ContractService;
 import com.dealchain.dealchain.domain.contract.service.JsonToPdfService;
 import com.dealchain.dealchain.domain.member.Member;
@@ -19,7 +18,6 @@ import com.dealchain.dealchain.domain.product.Product;
 import com.dealchain.dealchain.domain.product.ProductService;
 import com.dealchain.dealchain.util.ByteArrayMultipartFile;
 import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -45,9 +43,8 @@ public class ContractController {
     private final ChatRoomRepository chatRoomRepository;
     private final JsonToPdfService jsonToPdfService;
     private final MemberRepository memberRepository;
-    private static final Logger log = LoggerFactory.getLogger(ContractController.class);//로그용
+    private static final Logger log = LoggerFactory.getLogger(ContractController.class);
 
-    @Autowired // (Spring 4.3+ 부터 생성자가 1개면 @Autowired 생략 가능)
     public ContractController(ContractService contractService,
                               AICreateContract aiCreateContract,
                               ChatPaser chatPaser,
@@ -64,16 +61,12 @@ public class ContractController {
         this.jsonToPdfService = jsonToPdfService;
         this.memberRepository = memberRepository;
     }
-
-
-    //사용자가 서명을 요청함
     @PostMapping("/sign")
     public ResponseEntity<SignResponseDto> signContract(
             @Valid @RequestBody SignRequestDto requestDto) {
 
         try {
 
-            //로그인 토큰 정보에서 사용자 아이디 가져오기
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             if (auth == null || !auth.isAuthenticated()) {
                 SignResponseDto resp = SignResponseDto.builder()
@@ -84,7 +77,6 @@ public class ContractController {
             }
             Long userId;
             try {
-                //로그인 토큰 정보에서 사용자 아이디 가져옴;
                 userId = Long.parseLong(auth.getName());
             } catch (NumberFormatException ex) {
                 SignResponseDto resp = SignResponseDto.builder()
@@ -94,7 +86,6 @@ public class ContractController {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(resp);
             }
 
-            //2) roomId로 chatRoom 조회,잘못된 요청이면 에러 반환
             String roomId = requestDto.getRoomId();
             if (roomId == null || roomId.isEmpty()) {
                 SignResponseDto resp = SignResponseDto.builder()
@@ -114,10 +105,9 @@ public class ContractController {
 
             com.dealchain.dealchain.domain.chat.entity.ChatRoom room = roomOpt.get();
 
-            // 3) 해당 userId가 sellerId인지 buyerId인지 확인
+            // 거래 당사자 확인 (SELLER/BUYER)
             Long sellerId = room.getSellerId();
             Long buyerId = room.getBuyerId();
-            //해당 userId가 판매자 구매자인지 확인
             String role;
             if (sellerId != null && sellerId.equals(userId)) {
                 role = "SELLER";
@@ -142,6 +132,7 @@ public class ContractController {
 
             // 3. Service의 비즈니스 로직 결과에 따라 응답
 
+            // 양측 서명 완료 시 PDF 생성
             if(response.isBothSign()) {
                 Member seller = memberRepository.findById(sellerId)
                         .orElseThrow(() -> new IllegalArgumentException("PDF 생성 실패: 판매자(ID:" + sellerId + ")를 찾을 수 없습니다."));
@@ -149,11 +140,11 @@ public class ContractController {
                 Member buyer = memberRepository.findById(buyerId)
                         .orElseThrow(() -> new IllegalArgumentException("PDF 생성 실패: 구매자(ID:" + buyerId + ")를 찾을 수 없습니다."));
 
-                String sellerSignKey = seller.getSignatureImage();
-                String buyerSignKey = buyer.getSignatureImage();
-                String aiJson = requestDto.getContract();
+                String sellerSignKey = seller.getSignatureImage(); // S3 서명 이미지 키
+                String buyerSignKey = buyer.getSignatureImage();  // S3 서명 이미지 키
+                String aiJson = requestDto.getContract(); // AI 생성 계약서 JSON
 
-                //json -> upload 함수로 호출
+                // JSON과 서명 이미지로 PDF 생성
                 byte[] pdfBytes = jsonToPdfService.createPdf(
                         aiJson,
                         sellerSignKey,
@@ -308,10 +299,10 @@ public class ContractController {
             );
 
 
-            // 1. roomId로 대화 내역(String) 조회
+            // 대화 내역 조회
             String chatLog = chatPaser.buildSenderToContentsJsonByRoomId(roomId);
 
-            //대화 내역 뿐만 아니라 상품에 대한 정보도 보내야됨 description
+            // 상품 정보 조회
             Optional<Long> productIdOpt = chatRoomRepository.findProductIdByRoomId(roomId);
             Long productId = productIdOpt.orElseThrow(
                     () -> new IllegalArgumentException("해당 roomId에 대한 productId가 없습니다. roomId=" + roomId)
@@ -342,7 +333,7 @@ public class ContractController {
         } catch (Exception e) {
 
             // 오류 발생 시, 서버 로그에만 상세 내용을 기록하기
-            System.err.println("Failed to create contract from chat for roomId: {}" + e.getMessage());
+            log.error("Failed to create contract from chat for roomId: {}", requestDto.getRoomId(), e);
             ContractResponseDto errorResponse = ContractResponseDto.builder()
                     .isSuccess(false)
                     .data(null)

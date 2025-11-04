@@ -5,8 +5,6 @@ import com.dealchain.dealchain.domain.DealTracking.service.DealTrackingService;
 import com.dealchain.dealchain.domain.chat.entity.ChatRoom;
 import com.dealchain.dealchain.domain.chat.repository.ChatRoomRepository;
 import com.dealchain.dealchain.domain.contract.SignRepository;
-import com.dealchain.dealchain.domain.contract.dto.ContractResponseDto;
-import com.dealchain.dealchain.domain.contract.dto.SignRequestDto;
 import com.dealchain.dealchain.domain.contract.dto.SignResponseDto;
 import com.dealchain.dealchain.domain.contract.entity.Contract;
 import com.dealchain.dealchain.domain.contract.ContractRepository;
@@ -15,6 +13,8 @@ import com.dealchain.dealchain.domain.product.Product;
 import com.dealchain.dealchain.domain.security.HashService;
 import com.dealchain.dealchain.domain.security.S3UploadService;
 import com.dealchain.dealchain.util.EncryptionUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -26,6 +26,7 @@ import java.util.Optional;
 @Service
 @Transactional(transactionManager = "contractTransactionManager")
 public class ContractService {
+    private static final Logger log = LoggerFactory.getLogger(ContractService.class);
 
     private final ContractRepository contractRepository;
     private final S3UploadService s3UploadService;
@@ -51,7 +52,10 @@ public class ContractService {
         this.signRepository= signRepository;
     }
 
-   @Transactional
+    /**
+     * 계약서 생성 시 초기 서명 테이블 생성 (중복 방지)
+     */
+    @Transactional
     public SignTable createInitialSignIfNotExists(String roomId, Product product) {
         if (product == null) {
             throw new IllegalArgumentException("Product가 필요합니다.");
@@ -72,7 +76,9 @@ public class ContractService {
 
 
 
-    //사인 요청이 들어오면 서명하는 함수
+    /**
+     * 계약서 서명 처리 (양측 서명 완료 시 PDF 생성 필요)
+     */
     @Transactional
     public SignResponseDto signContract(String roomId, Long productId, Long userId, String role, String deviceInfo) {
         if (roomId == null || roomId.isBlank() || productId == null || userId == null || role == null||deviceInfo==null) {
@@ -104,13 +110,10 @@ public class ContractService {
                     .data("BadRequest: role은 SELLER 또는 BUYER 여야 합니다.")
                     .build();
         }
-        //3. isCompleted 함수로 COMPLETED 상태인지 확인 -> 그러면 json을 upload 함수로 전송
-
-
+        // 양측 서명 완료 여부 확인
         boolean BothSign = false;
         if (signTable.isCompleted()) {
-         //json-> upload로 전송해 계약서 pdf 만들기
-            BothSign=true;
+            BothSign = true; // 양측 서명 완료 시 PDF 생성 필요
         }
         signRepository.save(signTable);
 
@@ -164,7 +167,7 @@ public class ContractService {
         // PDF 파일의 내용으로부터 해시값 생성
         String hashValue = hashService.generateHashFromFile(pdfFile);
 
-        // 해시값을 sellerId와 buyerId를 사용하여 암호화
+        // PDF 무결성 검증을 위한 해시값 암호화 (sellerId, buyerId 사용)
         String encryptedHash;
         try {
             encryptedHash = encryptionUtil.encryptHashWithIds(hashValue, sellerId, buyerId);
@@ -218,7 +221,7 @@ public class ContractService {
                 // 2. 다운로드한 PDF 파일로부터 해시값 생성
                 String currentHash = hashService.generateHashFromBytes(pdfBytes);
 
-                // 3. 해시값 비교 (PDF 무결성 검증)
+                // 해시값 비교로 PDF 무결성 검증
                 if (!decryptedHash.equals(currentHash)) {
                     throw new IllegalArgumentException("계약서 파일의 무결성 검증에 실패했습니다. 파일이 변조되었을 수 있습니다.");
                 }
@@ -305,34 +308,23 @@ public class ContractService {
         String filePath = contract.getFilePath();
 
         try {
-            // S3에서 파일 삭제
             s3UploadService.deleteFile(filePath);
-
-            // DealTracking 기록 (DELETE) - 삭제 전에 기록
             recordDealTracking(contract, "DELETE", null);
-
-            // DB에서 Contract 삭제
             contractRepository.delete(contract);
         } catch (RuntimeException e) {
             // S3 삭제 실패 시에도 DB는 삭제하지 않도록 예외 전파
-            // 또는 S3 삭제 실패를 무시하고 DB만 삭제할 수도 있습니다.
             throw new RuntimeException("계약서 삭제 중 오류가 발생했습니다: " + e.getMessage(), e);
         }
     }
 
     /**
-     * 계약서 관련 작업을 DealTracking에 기록합니다.
-     * 
-     * @param contract 계약서 엔티티
-     * @param type 작업 타입 (CREATE, READ, EDIT, DELETE)
-     * @param deviceInfo 기기 정보 (선택사항)
+     * 계약서 작업 추적 기록 (거래 당사자만 기록, 실패해도 계약서 작업은 계속)
      */
     private void recordDealTracking(Contract contract, String type, String deviceInfo) {
         try {
-            // 인증된 사용자 정보 가져오기
+            // 인증 및 권한 검증
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             if (authentication == null || !authentication.isAuthenticated()) {
-                // 인증되지 않은 경우 tracking 기록하지 않음
                 return;
             }
 
@@ -341,25 +333,21 @@ public class ContractService {
             try {
                 principalId = Long.valueOf(principalName);
             } catch (NumberFormatException e) {
-                // 사용자 ID 형식이 유효하지 않은 경우 기록하지 않음
                 return;
             }
 
-            // roomId 확인 (필수)
             if (contract.getRoomId() == null) {
-                // roomId가 없는 경우 기록하지 않음
                 return;
             }
 
-            // role 결정 (현재 사용자가 seller인지 buyer인지 확인)
+            // 거래 당사자(SELLER/BUYER) 확인
             String role = null;
             if (contract.getSellerId() != null && contract.getSellerId().equals(principalId)) {
                 role = "SELLER";
             } else if (contract.getBuyerId() != null && contract.getBuyerId().equals(principalId)) {
                 role = "BUYER";
             } else {
-                // 사용자가 seller도 buyer도 아닌 경우 기록하지 않음
-                return;
+                return; // 거래 당사자가 아닌 경우 기록하지 않음
             }
 
             // DealTrackingRequest 생성
@@ -374,7 +362,7 @@ public class ContractService {
         } catch (Exception e) {
             // DealTracking 기록 실패는 로그만 남기고 예외를 전파하지 않음
             // (계약서 작업 자체는 성공해야 하므로)
-            System.err.println("DealTracking 기록 실패: " + e.getMessage());
+            log.error("DealTracking 기록 실패: {}", e.getMessage(), e);
         }
     }
 
@@ -393,7 +381,7 @@ public class ContractService {
             // 인증 정보 확인
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             if (authentication == null || !authentication.isAuthenticated()) {
-                System.err.println("유효하지 않은 사용자임");
+                log.warn("유효하지 않은 사용자임");
                 return;
             }
 
@@ -403,13 +391,13 @@ public class ContractService {
                 principalId = Long.valueOf(principalName);
             } catch (NumberFormatException e) {
 
-                System.err.println("DealTracking 중단: 유효하지 않은 Principal ID (principalName: {})");
+                log.warn("DealTracking 중단: 유효하지 않은 Principal ID (principalName: {})", principalName);
                 return;
             }
 
 
             if (roomId == null || roomId.isEmpty()) {
-                System.err.println("DealTracking 중단: roomId가 null이거나 비어있음 (userId: {})");
+                log.warn("DealTracking 중단: roomId가 null이거나 비어있음 (principalId: {})", principalId);
                 return;
             }
 
@@ -421,7 +409,7 @@ public class ContractService {
                 role = "BUYER";
             } else {
                 // 사용자가 해당 거래의 판매자도, 구매자도 아님 (인가(Authorization) 실패)
-                System.out.println("DealTracking 중단: 사용자가 거래 당사자가 아님"+ principalId + roomId);
+                log.warn("DealTracking 중단: 사용자가 거래 당사자가 아님 (principalId: {}, roomId: {})", principalId, roomId);
                 return;
             }
 
@@ -438,7 +426,7 @@ public class ContractService {
         } catch (Exception e) {
 
             // 예외를 전파하지 않고 경고 로그만 남깁니다.
-            System.err.println("DealTracking 기록 실패 (핵심 로직에 영향 없음): "+e.getMessage());
+            log.error("DealTracking 기록 실패 (핵심 로직에 영향 없음): {}", e.getMessage(), e);
 
         }
     }

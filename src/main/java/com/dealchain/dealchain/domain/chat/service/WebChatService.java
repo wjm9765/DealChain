@@ -1,4 +1,3 @@
-// java
 package com.dealchain.dealchain.domain.chat.service;
 
 import com.dealchain.dealchain.domain.chat.dto.WebMessageDto;
@@ -48,9 +47,9 @@ public class WebChatService {
             throw new EntityNotFoundException("토큰의 사용자와 senderId가 일치하지 않습니다."+principalId);
         }
 
-        // 채팅 대화 처리 로직
+        // 메시지 타입별 처리
         if (WebMessageDto.MessageType.TALK.equals(messageDto.getType())) {
-            //로직 처리 전 XSS 방어
+            // XSS 방어: 채팅 메시지 살균
             String sanitized = xssSanitizer.sanitizeForChat(messageDto.getMessage());
 
             ChatMessage chatMessage = ChatMessage.builder()

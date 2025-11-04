@@ -109,7 +109,7 @@ public class MemberService {
     @Transactional(readOnly = true, transactionManager = "memberTransactionManager")
     public Member login(String name, String residentNumber, String phoneNumber) {
         try {
-            // 입력값 암호화하여 DB의 암호화된 값과 직접 비교
+            // 암호화된 값으로 비교 (DB에 암호화된 상태로 저장됨)
             String encryptedName = encryptionUtil.encryptString(name);
             String encryptedResidentNumber = encryptionUtil.encryptString(residentNumber);
             String encryptedPhoneNumber = encryptionUtil.encryptString(phoneNumber);
@@ -119,7 +119,7 @@ public class MemberService {
 
             Member member = memberOpt.orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
 
-            // 반환용으로 복호화된 사본 생성
+            // 반환용 복호화된 사본 생성 (원본은 암호화 상태 유지)
             Member decrypted = new Member(
                     encryptionUtil.decryptString(member.getName()),
                     encryptionUtil.decryptString(member.getResidentNumber()),

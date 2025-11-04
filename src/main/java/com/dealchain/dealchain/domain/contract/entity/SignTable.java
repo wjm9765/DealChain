@@ -12,49 +12,43 @@ import java.time.LocalDateTime;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Entity
-@Table(name = "sign_table") // 테이블 이름 지정
+@Table(name = "sign_table")
 public class SignTable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id; // Primary Key
+    private Long id;
 
-    //roomId와 productId는 변경 불가
     @Column(name = "room_id", nullable = false, updatable = false)
     private String roomId;
 
     @Column(name = "product_id", nullable = false, updatable = false)
     private Long productId;
 
-    //EnumType 로 현재 서명 상태 저장
-    @Enumerated(EnumType.STRING) // DB에 "COMPLETED" 같은 문자열로 저장
+    @Enumerated(EnumType.STRING)
     @Column(name = "sign_status", nullable = false)
     private SignStatus status;
 
-    //null이면 서명하지 않음
     @Column(name = "seller_signed_at", nullable = true)
     private LocalDateTime sellerSignedAt;
 
     @Column(name = "buyer_signed_at", nullable = true)
     private LocalDateTime buyerSignedAt;
 
-    // 생성 시간 자동 기록
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-
-    // --- 서명 상태를 정의하는 Enum ---
+    /**
+     * 서명 상태
+     */
     public enum SignStatus {
-        PENDING_BOTH,    // 1. 양측 서명 대기
-        PENDING_BUYER,   // 2. 구매자 서명 대기 (판매자 완료)
-        PENDING_SELLER,  // 3. 판매자 서명 대기 (구매자 완료)
-        COMPLETED        // 4. 양측 서명 완료 (both_sign = true)
+        PENDING_BOTH,    // 양측 서명 대기
+        PENDING_BUYER,   // 구매자 서명 대기 (판매자 완료)
+        PENDING_SELLER,  // 판매자 서명 대기 (구매자 완료)
+        COMPLETED        // 양측 서명 완료
     }
 
-
-
-    //생성자
     @Builder
     public SignTable(String roomId, Long productId) {
         if (roomId == null || productId == null) {
@@ -62,25 +56,28 @@ public class SignTable {
         }
         this.roomId = roomId;
         this.productId = productId;
-
-        // [초기 상태]
-        this.status = SignStatus.PENDING_BOTH; // 1. 양측 서명 대기
+        this.status = SignStatus.PENDING_BOTH;
         this.sellerSignedAt = null;
         this.buyerSignedAt = null;
     }
 
-
-    //판매자가 서명하는 함수
+    /**
+     * 판매자 서명 처리
+     * 이미 서명한 경우 중복 서명 방지
+     */
     public void signBySeller() {
-        if (this.sellerSignedAt == null) { // 이미 서명했으면 다시 안 함
+        if (this.sellerSignedAt == null) {
             this.sellerSignedAt = LocalDateTime.now();
             updateStatus();
         }
     }
 
-    //구매자가 서명하는 함수
+    /**
+     * 구매자 서명 처리
+     * 이미 서명한 경우 중복 서명 방지
+     */
     public void signByBuyer() {
-        if (this.buyerSignedAt == null) { // 이미 서명했으면 다시 안 함
+        if (this.buyerSignedAt == null) {
             this.buyerSignedAt = LocalDateTime.now();
             updateStatus();
         }
@@ -106,18 +103,21 @@ public class SignTable {
         boolean buyerSigned = (this.buyerSignedAt != null);
 
         if (sellerSigned && buyerSigned) {
-            this.status = SignStatus.COMPLETED; // 4. 양측 서명 완료
+            this.status = SignStatus.COMPLETED;
         } else if (sellerSigned) {
-            this.status = SignStatus.PENDING_BUYER; // 2. 구매자 대기
+            this.status = SignStatus.PENDING_BUYER;
         } else if (buyerSigned) {
-            this.status = SignStatus.PENDING_SELLER; // 3. 판매자 대기
+            this.status = SignStatus.PENDING_SELLER;
         } else {
-            this.status = SignStatus.PENDING_BOTH; // 1. 양측 대기
+            this.status = SignStatus.PENDING_BOTH;
         }
     }
 
-    //서명 완료 여부 확인 함수
-    @Transient // (DB 컬럼이 아님을 명시)
+    /**
+     * 양측 서명 완료 여부 확인
+     * @Transient: DB 컬럼이 아닌 계산된 값
+     */
+    @Transient
     public boolean isCompleted() {
         return this.status == SignStatus.COMPLETED;
     }
