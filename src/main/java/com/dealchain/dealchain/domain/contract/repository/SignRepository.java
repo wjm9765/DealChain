@@ -1,4 +1,4 @@
-package com.dealchain.dealchain.domain.contract;
+package com.dealchain.dealchain.domain.contract.repository;
 
 import com.dealchain.dealchain.domain.contract.entity.SignTable;
 import org.springframework.data.jpa.repository.JpaRepository;

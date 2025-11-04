@@ -1,32 +1,48 @@
 package com.dealchain.dealchain.domain.contract.service;
 
+import com.dealchain.dealchain.domain.AI.dto.ContractDefaultReqeustDto;
+import com.dealchain.dealchain.domain.contract.repository.ContractDataRepository;
+import com.dealchain.dealchain.util.EncryptionUtil;
+import com.dealchain.dealchain.domain.AI.service.AICreateContract;
+import com.dealchain.dealchain.domain.AI.service.AIHelpService;
+import com.dealchain.dealchain.domain.AI.service.ChatPaser;
 import com.dealchain.dealchain.domain.DealTracking.dto.DealTrackingRequest;
 import com.dealchain.dealchain.domain.DealTracking.service.DealTrackingService;
 import com.dealchain.dealchain.domain.chat.entity.ChatRoom;
 import com.dealchain.dealchain.domain.chat.repository.ChatRoomRepository;
-import com.dealchain.dealchain.domain.contract.SignRepository;
+import com.dealchain.dealchain.domain.contract.dto.ContractCreateRequestDto;
+import com.dealchain.dealchain.domain.contract.dto.ContractResponseDto;
+import com.dealchain.dealchain.domain.contract.entity.ContractData;
+import com.dealchain.dealchain.domain.contract.repository.SignRepository;
 import com.dealchain.dealchain.domain.contract.dto.SignResponseDto;
 import com.dealchain.dealchain.domain.contract.entity.Contract;
 import com.dealchain.dealchain.domain.contract.ContractRepository;
 import com.dealchain.dealchain.domain.contract.entity.SignTable;
 import com.dealchain.dealchain.domain.product.Product;
+import com.dealchain.dealchain.domain.product.ProductService;
 import com.dealchain.dealchain.domain.security.HashService;
 import com.dealchain.dealchain.domain.security.S3UploadService;
-import com.dealchain.dealchain.util.EncryptionUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Map;
 import java.util.Optional;
 
 @Service
 @Transactional(transactionManager = "contractTransactionManager")
 public class ContractService {
     private static final Logger log = LoggerFactory.getLogger(ContractService.class);
+
+    @Autowired
+    private SimpMessagingTemplate messagingTemplate;//알림을 위한 의존성
 
     private final ContractRepository contractRepository;
     private final S3UploadService s3UploadService;
@@ -35,6 +51,11 @@ public class ContractService {
     private final DealTrackingService dealTrackingService;
     private final ChatRoomRepository chatRoomRepository;
     private final SignRepository signRepository;
+    private final AIHelpService aiHelpService;
+    private final ChatPaser chatPaser;
+    private final AICreateContract aiCreateContract;
+    private final ProductService productService;
+    private final ContractDataRepository contractDataRepository;
 
     public ContractService(ContractRepository contractRepository, 
                           S3UploadService s3UploadService,
@@ -42,7 +63,12 @@ public class ContractService {
                           EncryptionUtil encryptionUtil,
                           DealTrackingService dealTrackingService,
                           SignRepository signRepository,
-                          ChatRoomRepository chatRoomRepository) {
+                          ChatRoomRepository chatRoomRepository,
+                           ChatPaser chatPaser,
+                           AICreateContract aiCreateContract,
+                            ProductService productService,
+                           ContractDataRepository contractDataRepository,
+                           AIHelpService aiHelpService) {
         this.contractRepository = contractRepository;
         this.s3UploadService = s3UploadService;
         this.hashService = hashService;
@@ -50,6 +76,121 @@ public class ContractService {
         this.dealTrackingService = dealTrackingService;
         this.chatRoomRepository = chatRoomRepository;
         this.signRepository= signRepository;
+        this.aiHelpService=aiHelpService;
+        this.chatPaser = chatPaser;
+        this.aiCreateContract = aiCreateContract;
+        this.productService = productService;
+        this.contractDataRepository = contractDataRepository;
+    }
+
+    public String getSummaryofContract(String contract){
+        return aiHelpService.invokeClaude(contract);
+    }
+
+    @Transactional
+    public ContractResponseDto createContract(ContractCreateRequestDto requestDto, Long currentUserId) {
+
+        String roomId = requestDto.getRoomId();
+
+        // --- 1. [보안] '권한 확인 (Authorization)' ---
+        // 'java 시큐어 코딩 가이드' (117p) - DTO(신뢰X)가 아닌 DB(신뢰O) 조회
+        Optional<Long> productIdOpt = chatRoomRepository.findProductIdByRoomId(roomId);
+        Long productId = productIdOpt.orElseThrow(
+                () -> new IllegalArgumentException("해당 roomId에 대한 productId가 없습니다. roomId=" + roomId)
+        );
+        Product product = productService.findById(productId);
+
+        Long sellerId = product.getMemberId(); // (DB의 '진짜' 판매자 ID)
+        Long buyerId = chatRoomRepository.findBuyerIdByRoomId(roomId)
+                .orElseThrow(() -> new IllegalArgumentException("해당 roomId에 대한 buyerId가 없습니다. roomId=" + roomId));
+
+        boolean isCallerSeller = currentUserId.equals(sellerId);
+        boolean isCallerBuyer = currentUserId.equals(buyerId);
+
+        if (!isCallerSeller && !isCallerBuyer) {
+            throw new SecurityException("당신은 이 거래의 당사자가 아닙니다.");
+        }
+
+
+        String chatLog = chatPaser.buildSenderToContentsJsonByRoomId(roomId);
+        ContractDefaultReqeustDto default_request = ContractDefaultReqeustDto.builder()
+                .sellerId(sellerId).buyerId(buyerId).product(product).build();
+
+        String aiContractJson = aiCreateContract.invokeClaude(chatLog, default_request);
+        String summary = getSummaryofContract(aiContractJson);//요약 버전
+
+        // --- 3. [DB 저장] (Transaction) ---
+
+        // 3a. 거래 추적 (DTO의 ID 대신 '신뢰' ID 사용)
+        recordDealTrackingForCreate("CREATE", roomId, sellerId, buyerId, requestDto.getDeviceInfo());
+
+        //초기 서명 테이블 생성,both_pending
+        createInitialSignIfNotExists(roomId, product);
+
+        String encryptedJson;
+        try {
+            encryptedJson = encryptionUtil.encryptString(aiContractJson);
+        } catch (Exception e) {
+            log.error("계약서 암호화 실패: {}", e.getMessage(), e);
+            throw new RuntimeException("계약서 암호화 중 오류가 발생했습니다.", e);
+        }
+
+        // 3d. 'ContractData' 엔티티 생성 및 저장
+        ContractData contractDataToSave = ContractData.builder()
+                .roomId(roomId)
+                .sellerId(sellerId)
+                .buyerId(buyerId)
+                .contractJsonData(encryptedJson)
+                .build();
+        contractDataRepository.save(contractDataToSave); //계약서 저장
+
+
+        if (isCallerSeller) {
+
+            return ContractResponseDto.builder()
+                    .isSuccess(true)
+                    .data(aiContractJson)
+                    .summary(summary)
+                    .build();
+
+        } else if(isCallerBuyer){
+            sendContractRequestNotification(sellerId, roomId, buyerId);//구매자에게 알림 전송
+            return ContractResponseDto.builder()
+                    .isSuccess(true)
+                    .data("계약서 초안이 생성되어 판매자에게 검토 요청을 보냈습니다.")
+                    .summary(null)
+                    .build();
+        }
+        else{
+            throw new SecurityException("알 수 없는 에러 발생");
+        }
+    }
+
+
+    /**
+     * [알림] WebSocket을 통해 '판매자'에게 계약서 검토 요청 알림을 'Push'합니다.
+     * (이 로직은 @Async로 분리하는 것이 더 좋습니다.)
+     */
+    @Async
+    public void sendContractRequestNotification(Long sellerId, String roomId, Long buyerId) {
+        try {
+            Map<String, String> notificationPayload = Map.of(
+                    "type", "CONTRACT_REQUEST",
+                    "message", "계약서 검토 요청이 있습니다.",
+                    "roomId", roomId
+            );
+            // [핵심] '판매자'의 '개인 알림 채널'로 메시지 전송
+            messagingTemplate.convertAndSendToUser(
+                    String.valueOf(sellerId),
+                    "/queue/notifications",
+                    notificationPayload
+            );
+
+            log.info("판매자(ID: {})에게 계약서 검토 요청 알림 전송 완료 (RoomId: {})", sellerId, roomId);
+
+        } catch (Exception e) {
+            log.warn("WebSocket 알림 전송 실패 (계약서 생성은 성공함): {}", e.getMessage());
+        }
     }
 
     /**

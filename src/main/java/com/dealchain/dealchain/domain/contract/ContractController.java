@@ -10,6 +10,8 @@ import com.dealchain.dealchain.domain.contract.dto.ContractResponseDto;
 import com.dealchain.dealchain.domain.contract.dto.SignRequestDto;
 import com.dealchain.dealchain.domain.contract.dto.SignResponseDto;
 import com.dealchain.dealchain.domain.contract.entity.Contract;
+import com.dealchain.dealchain.domain.contract.entity.ContractData;
+import com.dealchain.dealchain.domain.contract.repository.ContractDataRepository;
 import com.dealchain.dealchain.domain.contract.service.ContractService;
 import com.dealchain.dealchain.domain.contract.service.JsonToPdfService;
 import com.dealchain.dealchain.domain.member.Member;
@@ -32,35 +34,46 @@ import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.dealchain.dealchain.util.EncryptionUtil;
+
+import javax.swing.text.html.Option;
 
 @RestController
 @RequestMapping("/api/contracts")
 public class ContractController {
     private final ContractService contractService;
-    private final ChatPaser chatPaser;
-    private final AICreateContract AICreateContract;
-    private final ProductService productService;
+//    private final ChatPaser chatPaser;
+//    private final AICreateContract AICreateContract;
+//    private final ProductService productService;
     private final ChatRoomRepository chatRoomRepository;
     private final JsonToPdfService jsonToPdfService;
     private final MemberRepository memberRepository;
+    private final ContractDataRepository contractDataRepository;
     private static final Logger log = LoggerFactory.getLogger(ContractController.class);
+    private final EncryptionUtil encryptionUtil;
 
     public ContractController(ContractService contractService,
-                              AICreateContract aiCreateContract,
-                              ChatPaser chatPaser,
-                              ProductService productService,
+                              //AICreateContract aiCreateContract,
+                              //ChatPaser chatPaser,
+                              //ProductService productService,
                               ChatRoomRepository chatRoomRepository,
                               JsonToPdfService jsonToPdfService,
-                              MemberRepository memberRepository
+                              MemberRepository memberRepository,
+                              ContractDataRepository contractDataRepository,
+                              EncryptionUtil encryptionUtil
     ) {
         this.contractService = contractService;
-        this.AICreateContract = aiCreateContract;
-        this.chatPaser = chatPaser;
-        this.productService = productService;
+        //this.AICreateContract = aiCreateContract;
+        //this.chatPaser = chatPaser;
+        //this.productService = productService;
         this.chatRoomRepository = chatRoomRepository;
         this.jsonToPdfService = jsonToPdfService;
         this.memberRepository = memberRepository;
+        this.contractDataRepository = contractDataRepository;
+        this.encryptionUtil = encryptionUtil;
     }
+
+
     @PostMapping("/sign")
     public ResponseEntity<SignResponseDto> signContract(
             @Valid @RequestBody SignRequestDto requestDto) {
@@ -198,50 +211,141 @@ public class ContractController {
         }
     }
 
-    /**
-     * PDF 파일을 업로드하여 S3에 저장하고 경로를 RDS에 저장합니다.
-     *
-     * POST /api/contracts/upload
-     */
-    @PostMapping("/upload")
-    public ResponseEntity<Map<String, Object>> uploadContract(
-            @RequestParam("pdf") MultipartFile pdfFile,
-            @RequestParam(value = "sellerId", required = false) Long sellerId,
-            @RequestParam(value = "buyerId", required = false) Long buyerId,
-            @RequestParam(value = "roomId", required = false) String roomId) {
+
+
+    @PostMapping("/search")
+    public ResponseEntity<ContractResponseDto> searchContract(
+            @RequestBody ContractCreateRequestDto requestDto) {
+
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        Long currentUserId; //현재 로그인한 사용자 ID
         try {
-            if (pdfFile == null || pdfFile.isEmpty()) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("message", "PDF 파일이 필요합니다.");
-                return ResponseEntity.badRequest().body(response);
+            currentUserId = Long.valueOf(authentication.getName());
+        } catch (NumberFormatException e) {
+            log.warn("인증 정보(JWT)에서 사용자 ID를 파싱할 수 없습니다: {}", authentication.getName());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ContractResponseDto.builder().isSuccess(false).data("유효하지 않은 인증 토큰입니다.").build());
+        }
+
+        try {
+            String roomId = requestDto.getRoomId();
+
+            // --------roomId가 있는지 DB에서 찾기 ---
+            if (roomId == null || roomId.isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body(ContractResponseDto.builder().isSuccess(false).data("roomId가 필요합니다.").build());
+            }
+            ChatRoom room = chatRoomRepository.findById(roomId)
+                    .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 채팅방(roomId)입니다."));
+
+            //DB에서 판매자 구매자 가져옴
+            Long dbSellerId = room.getSellerId(); // (DB에서 가져옴)
+            //교차 검증
+            boolean isSeller = currentUserId.equals(dbSellerId);
+
+            // 판매작만 여기에 요청할 수 있음
+            if (!isSeller) {
+                log.warn("FORBIDDEN: User {} (JWT)가 roomId {}의 당사자(Seller: {})가 아닙니다.",
+                        currentUserId, roomId, dbSellerId);
+                throw new SecurityException("이 계약서를 조회할 권한이 없습니다. (거래 당사자 아님)");
             }
 
-            Contract contract = contractService.uploadAndSaveContract(pdfFile, sellerId, buyerId, roomId);
 
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "계약서가 업로드되었습니다.");
-            response.put("contractId", contract.getId());
-            response.put("filePath", contract.getFilePath());
-            response.put("sellerId", contract.getSellerId());
-            response.put("buyerId", contract.getBuyerId());
-            response.put("roomId", contract.getRoomId());
-            response.put("encryptedHash", contract.getEncryptedHash());
+            //ㄱ계약서 내용을 복호화해서 전달
+            Optional<ContractData> contractDataOptional = contractDataRepository.findByRoomIdAndSellerIdAndBuyerId(roomId, dbSellerId, room.getBuyerId());
 
-            return ResponseEntity.ok(response);
+            ContractData contractData = contractDataOptional.orElseThrow(
+                    () -> new IllegalArgumentException("해당 조건의 계약서 데이터를 찾을 수 없습니다.")
+            );
+
+            String decryptedJson;
+            try {
+                decryptedJson = encryptionUtil.decryptString(contractData.getContractJsonData());
+
+                if (decryptedJson == null) {
+                    throw new IllegalStateException("복호화 결과가 null입니다.");
+                }
+
+            } catch (Exception e) {
+                log.error("CRITICAL: 계약서 DB 복호화 실패! (ContractData ID: {})", contractData.getId(), e);
+                throw new IllegalStateException("서버 오류: 계약서 데이터를 해독하는 데 실패했습니다.");
+            }
+
+
+            String Summary = contractService.getSummaryofContract(decryptedJson);
+
+            ContractResponseDto successResponse = ContractResponseDto.builder()
+                    .isSuccess(true)
+                    .data(decryptedJson)
+                    .summary(Summary)
+                    .build();
+
+            return ResponseEntity.ok(successResponse);
+
         } catch (IllegalArgumentException e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(response);
+            // (Room ID를 못 찾은 경우)
+            log.warn("Search failed: Resource not found. (roomId: {}) - {}", requestDto.getRoomId(), e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ContractResponseDto.builder().isSuccess(false).data(e.getMessage()).build());
+
+        } catch (SecurityException e) {
+            // (권한이 없는 경우)
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(ContractResponseDto.builder().isSuccess(false).data(e.getMessage()).build());
+
         } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "계약서 업로드 중 오류가 발생했습니다: " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+            // (그 외 모든 서버 오류)
+            log.error("Search failed: Internal server error. (roomId: {})", requestDto.getRoomId(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ContractResponseDto.builder().isSuccess(false).data("서버 내부 오류가 발생했습니다.").build());
         }
     }
+//
+//    /**
+//     * PDF 파일을 업로드하여 S3에 저장하고 경로를 RDS에 저장합니다.
+//     *
+//     * POST /api/contracts/upload
+//     */
+//    @PostMapping("/upload")
+//    public ResponseEntity<Map<String, Object>> uploadContract(
+//            @RequestParam("pdf") MultipartFile pdfFile,
+//            @RequestParam(value = "sellerId", required = false) Long sellerId,
+//            @RequestParam(value = "buyerId", required = false) Long buyerId,
+//            @RequestParam(value = "roomId", required = false) String roomId) {
+//        try {
+//            if (pdfFile == null || pdfFile.isEmpty()) {
+//                Map<String, Object> response = new HashMap<>();
+//                response.put("success", false);
+//                response.put("message", "PDF 파일이 필요합니다.");
+//                return ResponseEntity.badRequest().body(response);
+//            }
+//
+//            Contract contract = contractService.uploadAndSaveContract(pdfFile, sellerId, buyerId, roomId);
+//
+//            Map<String, Object> response = new HashMap<>();
+//            response.put("success", true);
+//            response.put("message", "계약서가 업로드되었습니다.");
+//            response.put("contractId", contract.getId());
+//            response.put("filePath", contract.getFilePath());
+//            response.put("sellerId", contract.getSellerId());
+//            response.put("buyerId", contract.getBuyerId());
+//            response.put("roomId", contract.getRoomId());
+//            response.put("encryptedHash", contract.getEncryptedHash());
+//
+//            return ResponseEntity.ok(response);
+//        } catch (IllegalArgumentException e) {
+//            Map<String, Object> response = new HashMap<>();
+//            response.put("success", false);
+//            response.put("message", e.getMessage());
+//            return ResponseEntity.badRequest().body(response);
+//        } catch (Exception e) {
+//            Map<String, Object> response = new HashMap<>();
+//            response.put("success", false);
+//            response.put("message", "계약서 업로드 중 오류가 발생했습니다: " + e.getMessage());
+//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+//        }
+//    }
 
     /**
      * ID로 계약서를 조회하고 S3에서 PDF를 다운로드하여 반환합니다.
@@ -274,72 +378,45 @@ public class ContractController {
      * @return ContractResponseDto (isSuccess, data: AI가 생성한 JSON 문자열)
      **/
     @PostMapping("/create")
-    public ResponseEntity<ContractResponseDto> createContractFromChat(@RequestBody ContractCreateRequestDto requestDto) {
+    public ResponseEntity<ContractResponseDto> createContractFromChat(
+            @RequestBody ContractCreateRequestDto requestDto) {
 
+        if (requestDto == null || requestDto.getRoomId() == null || requestDto.getRoomId().isEmpty()) {
+            ContractResponseDto errorResponse = ContractResponseDto.builder()
+                    .isSuccess(false).data(null).build();
+            return ResponseEntity.badRequest().body(errorResponse);
+        }
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        Long currentUserId = Long.valueOf(authentication.getName());
 
         try {
-            String roomId = requestDto.getRoomId();
 
-
-            if (roomId == null || roomId.isEmpty()) {
-                ContractResponseDto errorResponse = ContractResponseDto.builder()
-                        .isSuccess(false)
-                        .data(null)
-                        .build();
-                return ResponseEntity.badRequest().body(errorResponse);
-            }
-
-            //0. 거래 추적 테이블 작성
-            contractService.recordDealTrackingForCreate(
-                    "CREATE", // 추적 유형
-                    requestDto.getRoomId(),
-                    requestDto.getSellerId(),
-                    requestDto.getBuyerId(),
-                    requestDto.getDeviceInfo()
+            ContractResponseDto responseDto = contractService.createContract(
+                    requestDto,
+                    currentUserId
             );
 
+            return ResponseEntity.ok(responseDto);
 
-            // 대화 내역 조회
-            String chatLog = chatPaser.buildSenderToContentsJsonByRoomId(roomId);
+        } catch (SecurityException e) {
+            log.warn("FORBIDDEN: User {} tried to create contract for room {} without auth.",
+                    currentUserId, requestDto.getRoomId(), e);
+            ContractResponseDto errorResponse = ContractResponseDto.builder()
+                    .isSuccess(false).data(e.getMessage()).build();
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(errorResponse);
 
-            // 상품 정보 조회
-            Optional<Long> productIdOpt = chatRoomRepository.findProductIdByRoomId(roomId);
-            Long productId = productIdOpt.orElseThrow(
-                    () -> new IllegalArgumentException("해당 roomId에 대한 productId가 없습니다. roomId=" + roomId)
-            );
-            Product product = productService.findById(productId);
-
-
-            ContractDefaultReqeustDto default_request = ContractDefaultReqeustDto.builder()
-                    .sellerId(requestDto.getSellerId())
-                    .buyerId(requestDto.getBuyerId())
-                    .product(product)
-                    .build();
-
-            // 2. 대화 내역을 Bedrock AI에게 전송
-            String aiContractJson = AICreateContract.invokeClaude(chatLog,default_request);
-
-
-            // 3. 성공 응답(DTO) 생성
-            ContractResponseDto successResponse = ContractResponseDto.builder()
-                    .isSuccess(true)
-                    .data(aiContractJson) // AI가 생성한 JSON 문자열
-                    .build();
-
-            //4. 서명 테이블에 초기 데이터 생성 (서명 상태: 양측 서명 대기)
-            contractService.createInitialSignIfNotExists(roomId,product);
-            return ResponseEntity.ok(successResponse);
+        } catch (IllegalArgumentException e) {
+            log.warn("BAD_REQUEST: User {} failed to create contract for room {}: {}",
+                    currentUserId, requestDto.getRoomId(), e.getMessage());
+            ContractResponseDto errorResponse = ContractResponseDto.builder()
+                    .isSuccess(false).data(e.getMessage()).build();
+            return ResponseEntity.badRequest().body(errorResponse);
 
         } catch (Exception e) {
-
-            // 오류 발생 시, 서버 로그에만 상세 내용을 기록하기
             log.error("Failed to create contract from chat for roomId: {}", requestDto.getRoomId(), e);
             ContractResponseDto errorResponse = ContractResponseDto.builder()
-                    .isSuccess(false)
-                    .data(null)
-                    .build();
-
-            // 500 Internal Server Error 반환
+                    .isSuccess(false).data(null).build();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(errorResponse);
         }

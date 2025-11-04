@@ -16,4 +16,7 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, String> {
 
     @Query("select c.productId from ChatRoom c where c.roomId = :roomId")
     Optional<Long> findProductIdByRoomId(String roomId);
+
+    @Query("select c.buyerId from ChatRoom c where c.roomId = :roomId")
+    Optional<Long> findBuyerIdByRoomId(String roomId);
 }

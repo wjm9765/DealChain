@@ -19,6 +19,11 @@
     <button onclick="subscribeToRoom()">Subscribe</button>
     <button onclick="unsubscribeFromRoom()">Unsubscribe</button>
 </div>
+<!-- 새로 추가: 개인 알림(Private Notifications) 구독 UI -->
+<div style="margin-top:8px;">
+    <button onclick="subscribeNotifications()">Subscribe Notifications</button>
+    <button onclick="unsubscribeNotifications()">Unsubscribe Notifications</button>
+</div>
 <div>
     <label for="senderIdInput">Sender ID:</label>
     <input type="text" id="senderIdInput" value="10" />
@@ -32,10 +37,17 @@
 <h2>Received Messages:</h2>
 <div id="messages" style="border: 1px solid #ccc; height: 300px; overflow-y: scroll; padding: 10px;"></div>
 
+<!-- 새로 추가: 개인 알림 표시 영역 (채팅 메시지와 분리) -->
+<h2>Personal Notifications:</h2>
+<div id="notifications" style="border: 1px solid #f39c12; height: 150px; overflow-y: auto; padding: 10px; background:#fff8e1;"></div>
+
 <script>
     let stompClient = null;
     let currentSubscription = null;
+    // 새로 추가: 개인 알림 구독 핸들
+    let notificationSubscription = null;
     const messagesDiv = document.getElementById('messages');
+    const notificationsDiv = document.getElementById('notifications');
 
     function log(message) {
         console.log(message);
@@ -87,6 +99,8 @@
                  log('Disconnected');
                  stompClient = null; // 클라이언트 객체 초기화
                  currentSubscription = null; // 구독 정보 초기화
+                 // 개인 알림 구독도 초기화
+                 if (notificationSubscription) notificationSubscription = null;
              }
         });
 
@@ -252,6 +266,56 @@
             }, 200);
         } catch (error) {
             log(`LEAVE send error: ${error}`);
+        }
+    }
+
+    // 새로 추가: 개인 알림 구독 함수
+    function subscribeNotifications() {
+        if (!stompClient || !stompClient.active) {
+            log("Connect first!");
+            return;
+        }
+        if (notificationSubscription) {
+            log("Already subscribed to personal notifications.");
+            return;
+        }
+        try {
+            // '/user/queue/notifications' 경로 구독
+            notificationSubscription = stompClient.subscribe('/user/queue/notifications', (message) => {
+                log(`Notification received: ${message.body}`);
+                try {
+                    const payload = JSON.parse(message.body);
+                    // 간단한 표시: 시간 + 타입 + 메시지
+                    const p = document.createElement('p');
+                    const when = new Date().toLocaleTimeString();
+                    p.innerHTML = `<strong>[${when}] ${payload.type || 'NOTI'}</strong>: ${payload.message || message.body}`;
+                    notificationsDiv.appendChild(p);
+                    notificationsDiv.scrollTop = notificationsDiv.scrollHeight;
+                } catch (e) {
+                    // JSON parsing 실패 시 원문 출력
+                    const p = document.createElement('p');
+                    p.textContent = `[RAW] ${message.body}`;
+                    notificationsDiv.appendChild(p);
+                    notificationsDiv.scrollTop = notificationsDiv.scrollHeight;
+                }
+            });
+            log('Subscribed to /user/queue/notifications');
+        } catch (error) {
+            log(`Notification subscription error: ${error}`);
+        }
+    }
+
+    function unsubscribeNotifications() {
+        if (!notificationSubscription) {
+            log('Not subscribed to personal notifications.');
+            return;
+        }
+        try {
+            notificationSubscription.unsubscribe();
+            log('Unsubscribed from personal notifications.');
+            notificationSubscription = null;
+        } catch (error) {
+            log(`Notification unsubscription error: ${error}`);
         }
     }
 </script>
