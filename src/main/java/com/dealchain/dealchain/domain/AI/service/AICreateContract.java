@@ -1,4 +1,3 @@
-// java
 package com.dealchain.dealchain.domain.AI.service;
 
 import com.dealchain.dealchain.domain.AI.dto.ContractDefaultReqeustDto;
@@ -31,24 +30,25 @@ public class AICreateContract {
         this.contractDtoJsonConverter = contractDtoJsonConverter;
     }
 
-    @PostConstruct//시스템 시작할 때 한번 시작
+    @PostConstruct
     public void loadSystemPrompt() throws Exception {
         if (systemPromptResource == null || !systemPromptResource.exists()) {
-            //시스템 프롬프트가 없을 시
             throw new IllegalStateException("System prompt resource not found. Place the file at `src/main/resources/prompt/claude-contract-system-prompt.txt`");
         }
 
         try (InputStream is = systemPromptResource.getInputStream()) {
-            //시스템 프롬포트 가져오기
             this.systemPrompt = new String(is.readAllBytes(), StandardCharsets.UTF_8);
         }
     }
 
+    /**
+     * AWS Bedrock Claude를 호출하여 계약서 JSON 생성
+     */
     public String invokeClaude(String userChatLog, ContractDefaultReqeustDto reqeustDto) {
         String modelId = "apac.anthropic.claude-3-sonnet-20240229-v1:0";
 
+        // 상품 기본 정보를 JSON으로 변환하여 AI에 전달
         String default_info = contractDtoJsonConverter.toJson(reqeustDto);
-        //System.out.println(default_info);
 
         JSONObject requestBody = new JSONObject();
         requestBody.put("anthropic_version", "bedrock-2023-05-31");
