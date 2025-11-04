@@ -1,6 +1,7 @@
 package com.dealchain.dealchain.domain.contract.service;
 
 import com.dealchain.dealchain.domain.AI.dto.ContractDefaultReqeustDto;
+import com.dealchain.dealchain.domain.contract.dto.ContractEditRequestDto;
 import com.dealchain.dealchain.domain.contract.repository.ContractDataRepository;
 import com.dealchain.dealchain.util.EncryptionUtil;
 import com.dealchain.dealchain.domain.AI.service.AICreateContract;
@@ -88,12 +89,164 @@ public class ContractService {
     }
 
     @Transactional
+    public SignResponseDto sendTobuyerService(ContractCreateRequestDto requestDto,Long currentUserId) throws Exception{
+        String roomId = requestDto.getRoomId();
+        Optional<Long> productIdOpt = chatRoomRepository.findProductIdByRoomId(roomId);
+        Long productId = productIdOpt.orElseThrow(
+                () -> new IllegalArgumentException("해당 roomId에 대한 productId가 없습니다. roomId=" + roomId)
+        );
+        Product product = productService.findById(productId);
+
+        Long sellerId = product.getMemberId();
+        Long buyerId = chatRoomRepository.findBuyerIdByRoomId(roomId)
+                .orElseThrow(() -> new IllegalArgumentException("해당 roomId에 대한 buyerId가 없습니다. roomId=" + roomId));
+
+        if(requestDto.getBuyerId()!=buyerId||requestDto.getSellerId()!=sellerId){
+            throw new IllegalArgumentException("요청에 들어있는 값들이 실제 회원 정보와 일치하지 않습니다.");
+        }
+
+        //판매자가 구매자에게 서명을 요청할 수 있음
+        if (!currentUserId.equals(sellerId)) {
+            throw new SecurityException("판매자 본인만 서명을 요청할 수 있습니다.");
+        }
+
+        //1. 현재 판매자가 서명한 상태여야함.
+        Optional<SignTable> signTableOpt = signRepository.findByRoomIdAndProductId(roomId, productId);
+        if (signTableOpt.isEmpty()) {
+            throw new IllegalArgumentException("SignTable이 존재하지 않습니다.");
+        }
+        SignTable signTable = signTableOpt.get();
+        if(signTable.getStatus()!= SignTable.SignStatus.PENDING_BUYER){
+            //판매자가 서명한 상태가 아니면 예외
+            throw new IllegalArgumentException("판매자가 서명을 해야합니다.");
+        }
+        //2. 구매자에게 서명 요청 알림 전송
+        sendSignContractRequestNotification(sellerId,requestDto.getRoomId(),buyerId);
+
+        //거래 추적 테이블 작성 SIGN_REQUEST
+        recordDealTrackingForCreate("SIGN_REQUEST",requestDto.getRoomId(),sellerId,buyerId,requestDto.getDeviceInfo());
+
+        return SignResponseDto.builder()
+                .isSuccess(true)
+                .data("구매자한테 서명 요청을 보냈습니다.")
+                .bothSign(false)
+                .build();
+    }
+
+    @Transactional
+    public SignResponseDto reject(ContractCreateRequestDto requestDto,Long currentUserId) throws Exception{
+        //구매자가 서명을 거절했을 때
+        //requestDto에 들어있는 값들이 실제로 존재하는지 검증 roomId,sellerId,buyerId
+        //signtable에서 undoSignbySeller 호출 -> 판매자가 서명 호출한 걸 무효화 처리
+        //sendContractRequestNotification 호출 -> 판매자에게 알림 전송(sellerId,message: "구매자가 계약서 서명을 거절했습니다.")
+
+        String roomId = requestDto.getRoomId();
+        Optional<Long> productIdOpt = chatRoomRepository.findProductIdByRoomId(roomId);
+        Long productId = productIdOpt.orElseThrow(
+                () -> new IllegalArgumentException("해당 roomId에 대한 productId가 없습니다. roomId=" + roomId)
+        );
+        Product product = productService.findById(productId);
+
+        Long sellerId = product.getMemberId();
+        Long buyerId = chatRoomRepository.findBuyerIdByRoomId(roomId)
+                .orElseThrow(() -> new IllegalArgumentException("해당 roomId에 대한 buyerId가 없습니다. roomId=" + roomId));
+
+        if(requestDto.getBuyerId()!=buyerId||requestDto.getSellerId()!=sellerId){
+            throw new IllegalArgumentException("요청에 들어있는 값들이 실제 회원 정보와 일치하지 않습니다.");
+        }
+
+        // 구매자만 거절 할 수 있도록 요청
+        if (!currentUserId.equals(buyerId)) {
+            throw new SecurityException("구매자 본인만 서명을 거절할 수 있습니다.");
+        }
+
+        //SignTable 조회 및 판매자 서명 무효화 ---
+        SignTable signTable = signRepository.findByRoomIdAndProductId(roomId, productId)
+                .orElseThrow(() -> new IllegalArgumentException("SignTable이 존재하지 않습니다."));
+
+        signTable.undoSignBySeller();
+        signRepository.save(signTable); // 변경 사항 저장
+
+        //판매자에게 '거절' 알림 전송
+        sendContractRequestNotification(
+                sellerId,
+                roomId,
+                buyerId,
+                "구매자가 계약서 서명을 거절했습니다."
+        );
+
+        //거래 추적 테이블 작성
+        recordDealTrackingForCreate("REJECT",requestDto.getRoomId(),sellerId,buyerId,requestDto.getDeviceInfo());
+
+        return SignResponseDto.builder()
+                .isSuccess(true)
+                .data("계약서 서명이 거절되었으며, 판매자에게 알림을 전송했습니다.")
+                .bothSign(false)
+                .build();
+    }
+
+    @Transactional
+    public ContractResponseDto EditContract(ContractEditRequestDto requestDto, Long currentUserId) throws Exception {
+
+        //값이 맞는지 검증 조회
+        String roomId = requestDto.getRoomId();
+        Optional<Long> productIdOpt = chatRoomRepository.findProductIdByRoomId(roomId);
+        Long productId = productIdOpt.orElseThrow(
+                () -> new IllegalArgumentException("해당 roomId에 대한 productId가 없습니다. roomId=" + roomId)
+        );
+        Product product = productService.findById(productId);
+        Long sellerId = product.getMemberId(); // (DB의 '진짜' 판매자 ID)
+
+        //판매자만 계약서 수정할 수 있음
+        if (!currentUserId.equals(sellerId)) {
+            throw new SecurityException("판매자만 계약서를 수정할 수 있습니다.");
+        }
+
+        // 구매자 ID 조회
+        Long buyerId = chatRoomRepository.findBuyerIdByRoomId(roomId)
+                .orElseThrow(() -> new IllegalArgumentException("해당 roomId에 대한 buyerId가 없습니다. roomId=" + roomId));
+
+        //수정된 계약서 업데이트
+        ContractData contractData = contractDataRepository.findByRoomIdAndSellerIdAndBuyerId(roomId, sellerId, buyerId)
+                .orElseThrow(() -> new IllegalArgumentException("수정할 기존 계약서 데이터를 찾을 수 없습니다."));
+
+
+        // 2b. 요약본 생성
+        String newSummary = getSummaryofContract(requestDto.getEditjson());
+
+
+        // 새로운 계약서 내용을 암호화
+        String encryptedJson;
+        try {
+            encryptedJson = encryptionUtil.encryptString(requestDto.getEditjson());
+        } catch (Exception e) {
+            log.error("계약서 (수정) 암호화 실패: {}", e.getMessage(), e);
+            throw new RuntimeException("계약서 암호화 중 오류가 발생했습니다.", e);
+        }
+        contractData.updateContractJson(encryptedJson);
+
+        // 거래 추적 ---
+        recordDealTrackingForCreate(
+                "EDIT", // 추적 유형 변경
+                roomId,
+                sellerId,
+                buyerId,
+                requestDto.getDeviceInfo()
+        );
+
+        // --- 5. [응답] ---
+        // 수정된 '새' 계약서와 '새' 요약본을 반환
+        return ContractResponseDto.builder()
+                .isSuccess(true)
+                .data(requestDto.getEditjson())
+                .summary(newSummary)
+                .build();
+    }
+
+    @Transactional
     public ContractResponseDto createContract(ContractCreateRequestDto requestDto, Long currentUserId) {
 
         String roomId = requestDto.getRoomId();
-
-        // --- 1. [보안] '권한 확인 (Authorization)' ---
-        // 'java 시큐어 코딩 가이드' (117p) - DTO(신뢰X)가 아닌 DB(신뢰O) 조회
         Optional<Long> productIdOpt = chatRoomRepository.findProductIdByRoomId(roomId);
         Long productId = productIdOpt.orElseThrow(
                 () -> new IllegalArgumentException("해당 roomId에 대한 productId가 없습니다. roomId=" + roomId)
@@ -145,8 +298,7 @@ public class ContractService {
         contractDataRepository.save(contractDataToSave); //계약서 저장
 
 
-        if (isCallerSeller) {
-
+        if (isCallerSeller) {//판매자가 생성을 요청했을 시
             return ContractResponseDto.builder()
                     .isSuccess(true)
                     .data(aiContractJson)
@@ -154,10 +306,10 @@ public class ContractService {
                     .build();
 
         } else if(isCallerBuyer){
-            sendContractRequestNotification(sellerId, roomId, buyerId);//구매자에게 알림 전송
+            sendContractRequestNotification(sellerId, roomId, buyerId,"계약서 검토 요청이 있습니다.");//구매자에게 알림 전송
             return ContractResponseDto.builder()
                     .isSuccess(true)
-                    .data("계약서 초안이 생성되어 판매자에게 검토 요청을 보냈습니다.")
+                    .data("계약서 생성 요청을 판매자에게 보냈습니다.")
                     .summary(null)
                     .build();
         }
@@ -166,17 +318,39 @@ public class ContractService {
         }
     }
 
+    //판매자가 서명 완료하고 구매자한테 서명 요청하는것
+    @Async
+    public void sendSignContractRequestNotification(Long sellerId, String roomId, Long buyerId) {
+        try {
+            Map<String, String> notificationPayload = Map.of(
+                    "type", "CONTRACT_REQUEST",
+                    "message", " 계약서 서명 요청이 있습니다.",
+                    "roomId", roomId
+            );
+            // [핵심] '판매자'의 '개인 알림 채널'로 메시지 전송
+            messagingTemplate.convertAndSendToUser(
+                    String.valueOf(buyerId),
+                    "/queue/notifications",
+                    notificationPayload
+            );
+
+            log.info("판매자(ID: {})에게 계약서 서명 요청 알림 전송 완료 (RoomId: {})", sellerId, roomId);
+
+        } catch (Exception e) {
+            log.warn("WebSocket 알림 전송 실패 (계약서 생성은 성공함): {}", e.getMessage());
+        }
+    }
 
     /**
      * [알림] WebSocket을 통해 '판매자'에게 계약서 검토 요청 알림을 'Push'합니다.
      * (이 로직은 @Async로 분리하는 것이 더 좋습니다.)
      */
     @Async
-    public void sendContractRequestNotification(Long sellerId, String roomId, Long buyerId) {
+    public void sendContractRequestNotification(Long sellerId, String roomId, Long buyerId,String message) {
         try {
             Map<String, String> notificationPayload = Map.of(
                     "type", "CONTRACT_REQUEST",
-                    "message", "계약서 검토 요청이 있습니다.",
+                    "message", message,
                     "roomId", roomId
             );
             // [핵심] '판매자'의 '개인 알림 채널'로 메시지 전송
@@ -221,13 +395,45 @@ public class ContractService {
      * 계약서 서명 처리 (양측 서명 완료 시 PDF 생성 필요)
      */
     @Transactional
-    public SignResponseDto signContract(String roomId, Long productId, Long userId, String role, String deviceInfo) {
-        if (roomId == null || roomId.isBlank() || productId == null || userId == null || role == null||deviceInfo==null) {
+    public SignResponseDto signContract(String roomId, Long productId, Long userId, String role,String contract, String deviceInfo) {
+        // 필수 파라미터 검사 (null/빈 문자열 포함)
+        if (roomId == null || roomId.isBlank()
+                || productId == null
+                || userId == null
+                || role == null || role.isBlank()
+                || deviceInfo == null || deviceInfo.isBlank()
+                || contract == null || contract.isEmpty()) {
             return SignResponseDto.builder()
                     .isSuccess(false)
                     .data("BadRequest: 필수 파라미터 누락")
                     .build();
         }
+
+        // 저장된 계약서 조회 (Optional 안전 처리)
+        ContractData contractData = contractDataRepository.findByroomId(roomId)
+                .orElseThrow(() -> new IllegalArgumentException("해당 roomId에 대한 계약서 데이터가 없습니다. roomId=" + roomId));
+
+        // 복호화는 예외 처리
+        String decryptedContractJson;
+        try {
+            decryptedContractJson = encryptionUtil.decryptString(contractData.getContractJsonData());
+        } catch (Exception e) {
+            log.error("계약서 복호화 실패: {}", e.getMessage(), e);
+            return SignResponseDto.builder()
+                    .isSuccess(false)
+                    .data("ServerError: 계약서 복호화 실패")
+                    .build();
+        }
+
+        // 비교: 저장된 계약서와 전달된 계약서가 동일한지 확인
+        if (!decryptedContractJson.equals(contract)) {
+            return SignResponseDto.builder()
+                    .isSuccess(false)
+                    .data("BadRequest: 저장된 계약서 내용이 다릅니다.")
+                    .build();
+        }
+
+
         //role은 SELLER,BUYER
         //1. 기존 서명 테이블에 있는 항목을 불러옴
         Optional<SignTable> signOpt = signRepository.findByRoomIdAndProductId(roomId, productId);

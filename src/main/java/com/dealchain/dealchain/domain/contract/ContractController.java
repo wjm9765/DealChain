@@ -5,12 +5,10 @@ import com.dealchain.dealchain.domain.AI.service.AICreateContract;
 import com.dealchain.dealchain.domain.AI.service.ChatPaser;
 import com.dealchain.dealchain.domain.chat.entity.ChatRoom;
 import com.dealchain.dealchain.domain.chat.repository.ChatRoomRepository;
-import com.dealchain.dealchain.domain.contract.dto.ContractCreateRequestDto;
-import com.dealchain.dealchain.domain.contract.dto.ContractResponseDto;
-import com.dealchain.dealchain.domain.contract.dto.SignRequestDto;
-import com.dealchain.dealchain.domain.contract.dto.SignResponseDto;
+import com.dealchain.dealchain.domain.contract.dto.*;
 import com.dealchain.dealchain.domain.contract.entity.Contract;
 import com.dealchain.dealchain.domain.contract.entity.ContractData;
+import com.dealchain.dealchain.domain.contract.entity.SignTable;
 import com.dealchain.dealchain.domain.contract.repository.ContractDataRepository;
 import com.dealchain.dealchain.domain.contract.service.ContractService;
 import com.dealchain.dealchain.domain.contract.service.JsonToPdfService;
@@ -107,7 +105,7 @@ public class ContractController {
                         .build();
                 return ResponseEntity.badRequest().body(resp);
             }
-            Optional<com.dealchain.dealchain.domain.chat.entity.ChatRoom> roomOpt = chatRoomRepository.findById(roomId);
+            Optional<ChatRoom> roomOpt = chatRoomRepository.findById(roomId);
             if (roomOpt.isEmpty()) {
                 SignResponseDto resp = SignResponseDto.builder()
                         .isSuccess(false)
@@ -116,7 +114,7 @@ public class ContractController {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(resp);
             }
 
-            com.dealchain.dealchain.domain.chat.entity.ChatRoom room = roomOpt.get();
+            ChatRoom room = roomOpt.get();
 
             // 거래 당사자 확인 (SELLER/BUYER)
             Long sellerId = room.getSellerId();
@@ -135,12 +133,12 @@ public class ContractController {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(resp);
             }
 
-
             // 위에서 검증한 데이터로 서비스 레이어 호출
             SignResponseDto response = contractService.signContract(requestDto.getRoomId(),
                     requestDto.getProductId(),
                     userId,
                     role,
+                    requestDto.getContract(),
                     requestDto.getDeviceInfo());
 
             // 3. Service의 비즈니스 로직 결과에 따라 응답
@@ -241,19 +239,21 @@ public class ContractController {
 
             //DB에서 판매자 구매자 가져옴
             Long dbSellerId = room.getSellerId(); // (DB에서 가져옴)
+            Long dbBuyerId = room.getBuyerId();   // (DB에서 가져옴)
             //교차 검증
-            boolean isSeller = currentUserId.equals(dbSellerId);
+            //boolean isSeller = currentUserId.equals(dbSellerId);
+            boolean isBuyer = currentUserId.equals(dbBuyerId);
 
-            // 판매작만 여기에 요청할 수 있음
-            if (!isSeller) {
+            //판매자가 서명 하고 구매자한테 계약서 전달 하는 시나리오만 고려
+            if (!isBuyer) {
                 log.warn("FORBIDDEN: User {} (JWT)가 roomId {}의 당사자(Seller: {})가 아닙니다.",
-                        currentUserId, roomId, dbSellerId);
+                        currentUserId, roomId, dbBuyerId);
                 throw new SecurityException("이 계약서를 조회할 권한이 없습니다. (거래 당사자 아님)");
             }
 
 
             //ㄱ계약서 내용을 복호화해서 전달
-            Optional<ContractData> contractDataOptional = contractDataRepository.findByRoomIdAndSellerIdAndBuyerId(roomId, dbSellerId, room.getBuyerId());
+            Optional<ContractData> contractDataOptional = contractDataRepository.findByRoomIdAndSellerIdAndBuyerId(roomId, dbSellerId, dbBuyerId);
 
             ContractData contractData = contractDataOptional.orElseThrow(
                     () -> new IllegalArgumentException("해당 조건의 계약서 데이터를 찾을 수 없습니다.")
@@ -377,6 +377,189 @@ public class ContractController {
      * @param requestDto (ContractCreateRequestDto: roomId 포함)
      * @return ContractResponseDto (isSuccess, data: AI가 생성한 JSON 문자열)
      **/
+
+
+    @PostMapping("/reject")
+    public ResponseEntity<SignResponseDto> rejectContract(
+            @RequestBody ContractCreateRequestDto requestDto) {
+        // roomId 유효성 검사 및 예외처리
+        if (requestDto == null || requestDto.getRoomId() == null || requestDto.getRoomId().isEmpty()) {
+            SignResponseDto errorResponse = SignResponseDto.builder()
+                    .isSuccess(false).data("roomId가 유효하지 않습니다").build();
+            return ResponseEntity.badRequest().body(errorResponse);
+        }
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            SignResponseDto resp = SignResponseDto.builder()
+                    .isSuccess(false).data("Unauthorized: 인증 정보가 없습니다.").build();
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(resp);
+        }
+        Long currentUserId;
+        try {
+            currentUserId = Long.valueOf(authentication.getName());
+        } catch (NumberFormatException e) {
+            SignResponseDto resp = SignResponseDto.builder()
+                    .isSuccess(false).data("Unauthorized: 사용자 ID 파싱 실패.").build();
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(resp);
+        }
+
+        try {
+            //거절 요청 생성
+            SignResponseDto responseDto = contractService.reject(requestDto, currentUserId);
+
+            if (responseDto == null) {
+                SignResponseDto resp = SignResponseDto.builder()
+                        .isSuccess(false).data("서버 오류: 처리 결과가 없습니다.").build();
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(resp);
+            }
+
+            if (responseDto.isSuccess()) {
+                return ResponseEntity.ok(responseDto);
+            } else {
+                return ResponseEntity.badRequest().body(responseDto);
+            }
+
+        } catch (IllegalArgumentException e) {
+            log.warn("Reject failed: Resource not found. (roomId: {}) - {}", requestDto.getRoomId(), e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(SignResponseDto.builder().isSuccess(false).data(e.getMessage()).build());
+
+        } catch (SecurityException e) {
+            log.warn("Reject failed: Authorization failed. (roomId: {}) - {}", requestDto.getRoomId(), e.getMessage());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(SignResponseDto.builder().isSuccess(false).data(e.getMessage()).build());
+
+        } catch (Exception e) {
+            log.error("Reject failed: Internal server error. (roomId: {})", requestDto.getRoomId(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(SignResponseDto.builder().isSuccess(false).data("서버 내부 오류가 발생했습니다.").build());
+        }
+    }
+
+    @PostMapping("/edit")
+    public ResponseEntity<ContractResponseDto> EditContract(
+            @RequestBody ContractEditRequestDto requestDto) {
+        // roomId 유효성 검사 및 예외처리
+        if (requestDto == null || requestDto.getRoomId() == null || requestDto.getRoomId().isEmpty()) {
+            ContractResponseDto errorResponse = ContractResponseDto.builder()
+                    .isSuccess(false).data("roomId가 유효하지 않습니다").build();
+            return ResponseEntity.badRequest().body(errorResponse);
+        }
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            ContractResponseDto resp = ContractResponseDto.builder()
+                    .isSuccess(false).data("Unauthorized: 인증 정보가 없습니다.").build();
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(resp);
+        }
+        Long currentUserId;
+        try {
+            currentUserId = Long.valueOf(authentication.getName());
+        } catch (NumberFormatException e) {
+            ContractResponseDto resp = ContractResponseDto.builder()
+                    .isSuccess(false).data("Unauthorized: 사용자 ID 파싱 실패.").build();
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(resp);
+        }
+        try {
+            // 편집 요청 처리, 거래 추적도 생성됨
+            ContractResponseDto responseDto = contractService.EditContract(requestDto, currentUserId);
+
+            if (responseDto == null) {
+                ContractResponseDto resp = ContractResponseDto.builder()
+                        .isSuccess(false).data("서버 오류: 처리 결과가 없습니다.").build();
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(resp);
+            }
+
+            if (responseDto.isSuccess()) {
+                return ResponseEntity.ok(responseDto);
+            } else {
+                return ResponseEntity.badRequest().body(responseDto);
+            }
+        } catch (IllegalArgumentException e) {
+            log.warn("Edit failed: Resource not found. (roomId: {}) - {}", requestDto.getRoomId(), e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ContractResponseDto.builder().isSuccess(false).data(e.getMessage()).build());
+
+        } catch (SecurityException e) {
+            log.warn("Edit failed: Authorization failed. (roomId: {}) - {}", requestDto.getRoomId(), e.getMessage());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(ContractResponseDto.builder().isSuccess(false).data(e.getMessage()).build());
+
+        } catch (Exception e) {
+            log.error("Edit failed: Internal server error. (roomId: {})", requestDto.getRoomId(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ContractResponseDto.builder().isSuccess(false).data("서버 내부 오류가 발생했습니다.").build());
+        }
+    }
+
+    @PostMapping("/send")
+    public ResponseEntity<SignResponseDto> sendToBuyer(
+            @RequestBody ContractCreateRequestDto requestDto) {
+
+        if (requestDto == null || requestDto.getRoomId() == null || requestDto.getRoomId().isEmpty()) {
+            SignResponseDto errorResponse = SignResponseDto.builder()
+                    .isSuccess(false)
+                    .data("roomId가 유효하지 않습니다")
+                    .bothSign(false)
+                    .build();
+            return ResponseEntity.badRequest().body(errorResponse);
+        }
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            SignResponseDto resp = SignResponseDto.builder()
+                    .isSuccess(false)
+                    .data("Unauthorized: 인증 정보가 없습니다.")
+                    .bothSign(false)
+                    .build();
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(resp);
+        }
+
+        Long currentUserId;
+        try {
+            currentUserId = Long.valueOf(authentication.getName());
+        } catch (NumberFormatException e) {
+            SignResponseDto resp = SignResponseDto.builder()
+                    .isSuccess(false)
+                    .data("Unauthorized: 사용자 ID 파싱 실패.")
+                    .bothSign(false)
+                    .build();
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(resp);
+        }
+
+        try {
+            SignResponseDto responseDto = contractService.sendTobuyerService(requestDto, currentUserId);
+            return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(responseDto);
+
+        } catch (SecurityException e) {
+            log.warn("FORBIDDEN: User {} tried to send contract for room {} without auth.", currentUserId, requestDto.getRoomId(), e);
+            SignResponseDto errorResponse = SignResponseDto.builder()
+                    .isSuccess(false)
+                    .data(e.getMessage())
+                    .bothSign(false)
+                    .build();
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(errorResponse);
+
+        } catch (IllegalArgumentException e) {
+            log.warn("BAD_REQUEST: User {} failed to send contract for room {}: {}", currentUserId, requestDto.getRoomId(), e.getMessage());
+            SignResponseDto errorResponse = SignResponseDto.builder()
+                    .isSuccess(false)
+                    .data(e.getMessage())
+                    .bothSign(false)
+                    .build();
+            return ResponseEntity.badRequest().body(errorResponse);
+
+        } catch (Exception e) {
+            log.error("Failed to send contract for roomId: {}", requestDto.getRoomId(), e);
+            SignResponseDto errorResponse = SignResponseDto.builder()
+                    .isSuccess(false)
+                    .data("서버 내부 오류가 발생했습니다.")
+                    .bothSign(false)
+                    .build();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
+
+
     @PostMapping("/create")
     public ResponseEntity<ContractResponseDto> createContractFromChat(
             @RequestBody ContractCreateRequestDto requestDto) {
@@ -422,44 +605,7 @@ public class ContractController {
         }
     }
 
-    /**
-     * ID로 계약서의 PDF를 수정합니다. (S3의 같은 경로로 교체)
-     *
-     * PUT /api/contracts/{id}
-     */
-    @PutMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> updateContract(
-            @PathVariable("id") Long id,
-            @RequestParam("pdf") MultipartFile pdfFile) {
-        try {
-            if (pdfFile == null || pdfFile.isEmpty()) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("message", "PDF 파일이 필요합니다.");
-                return ResponseEntity.badRequest().body(response);
-            }
 
-            Contract contract = contractService.updateContractPdf(id, pdfFile);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "계약서가 수정되었습니다.");
-            response.put("contractId", contract.getId());
-            response.put("filePath", contract.getFilePath());
-
-            return ResponseEntity.ok(response);
-        } catch (IllegalArgumentException e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(response);
-        } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "계약서 수정 중 오류가 발생했습니다: " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
-        }
-    }
 
     /**
      * ID로 계약서를 삭제합니다. (DB와 S3에서 모두 삭제)

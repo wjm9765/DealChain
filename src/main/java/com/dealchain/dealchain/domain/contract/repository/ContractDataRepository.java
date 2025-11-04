@@ -10,6 +10,8 @@ import java.util.Optional;
 @Repository
 public interface ContractDataRepository extends JpaRepository<ContractData, Long> {
 
+    Optional<ContractData> findByroomId(String roomId);
+
     Optional<ContractData> findByRoomIdAndSellerIdAndBuyerId(String roomId, Long sellerId, Long buyerId);
 
 }
