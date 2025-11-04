@@ -179,8 +179,8 @@ public class ContractService {
         Contract contract = new Contract(filePath, sellerId, buyerId, roomId, encryptedHash);
         Contract savedContract = contractRepository.save(contract);
 
-        // DealTracking 기록 (CREATE)
-        recordDealTracking(savedContract, "CREATE", null);
+        // DealTracking 기록 (SAVE)
+        recordDealTracking(savedContract, "SAVE", null);
 
         return savedContract;
     }

@@ -16,6 +16,7 @@ import com.dealchain.dealchain.domain.member.Member;
 import com.dealchain.dealchain.domain.member.MemberRepository;
 import com.dealchain.dealchain.domain.product.Product;
 import com.dealchain.dealchain.domain.product.ProductService;
+import com.dealchain.dealchain.util.ByteArrayMultipartFile;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -149,6 +150,29 @@ public class ContractController {
                         sellerSignKey,
                         buyerSignKey
                 );
+
+                //메모리에 저장된 pdf를 MultipartFile로 변환
+                MultipartFile finalPdfFile = new ByteArrayMultipartFile(
+                        pdfBytes,
+                        "contract-" + requestDto.getRoomId() + ".pdf",
+                        "application/pdf"
+                );
+
+
+                try{
+                    contractService.uploadAndSaveContract(finalPdfFile, sellerId, buyerId, roomId);
+
+                }
+                catch (Exception e){
+                    log.error("PDF 업로드 및 저장 실패: roomId: {}, error: {}", requestDto.getRoomId(), e.getMessage());
+                    response = SignResponseDto.builder()
+                            .isSuccess(false)
+                            .data("PDF 서버에 업로드 및 저장 중 오류가 발생했습니다.")
+                            .bothSign(true)
+                            .build();
+                    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+                }
+
             }
 
             if (response.isSuccess()) {

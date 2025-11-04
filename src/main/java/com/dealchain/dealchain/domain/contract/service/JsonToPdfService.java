@@ -26,6 +26,8 @@ import java.io.FileOutputStream;
 @Service
 public class JsonToPdfService {
 
+    private static final int MAX_JSON_SIZE = 5_242_880;//5MB
+
     private final XssSanitizer xssSanitizer;
     private final ObjectMapper objectMapper;
     private final S3UploadService s3UploadService;
@@ -60,29 +62,31 @@ public class JsonToPdfService {
         }
     }
 
-    /**
-     * 테스트용: PDF를 바탕화면에 저장
-     * 프로덕션 배포 전 제거 필요
-     */
-    private void savePdfToDesktopForTesting(byte[] pdfBytes) {
-        try {
-            String userHome = System.getProperty("user.home");
-            String desktopPath = userHome + "/Desktop";
-            String filePath = desktopPath + "/test_contract.pdf";
 
-            log.warn("--- [테스트 전용 보안 경고] ---");
-            log.warn("'java 시큐어 코딩 가이드' (84p) 위반: 민감한 PDF를 서버 디스크에 저장합니다.");
-            log.warn("저장 위치: {}", filePath);
-            log.warn("프로덕션 배포 전 이 'savePdfToDesktopForTesting' 호출 코드를 반드시 제거하십시오.");
-            log.warn("------------------------------");
-            try (FileOutputStream fos = new FileOutputStream(filePath)) {
-                fos.write(pdfBytes);
-            }
-
-        } catch (Exception e) {
-            log.error("테스트용 PDF 파일 저장 실패 (메인 로직 계속 진행): {}", e.getMessage());
-        }
-    }
+//    //나중에 삭제해야됨,테스트용 함수
+//    private void savePdfToDesktopForTesting(byte[] pdfBytes) {
+//        try {
+//            // [보안] 'resources'가 아닌 '사용자 홈 디렉토리' (예: C:\Users\YourUser 또는 /home/YourUser)
+//            String userHome = System.getProperty("user.home");
+//            String desktopPath = userHome + "/Desktop"; // 바탕화면 경로
+//            String filePath = desktopPath + "/test_contract.pdf";
+//
+//            log.warn("--- [테스트 전용 보안 경고] ---");
+//            log.warn("'java 시큐어 코딩 가이드' (84p) 위반: 민감한 PDF를 서버 디스크에 저장합니다.");
+//            log.warn("저장 위치: {}", filePath);
+//            log.warn("프로덕션 배포 전 이 'savePdfToDesktopForTesting' 호출 코드를 반드시 제거하십시오.");
+//            log.warn("------------------------------");
+//
+//            // '디스크'에 파일 쓰기 (C++의 fwrite와 유사)
+//            try (FileOutputStream fos = new FileOutputStream(filePath)) {
+//                fos.write(pdfBytes);
+//            }
+//
+//        } catch (Exception e) {
+//            // 테스트용 저장이 실패해도, 메인 로직(S3 업로드)은 중단되면 안 됨.
+//            log.error("테스트용 PDF 파일 저장 실패 (메인 로직 계속 진행): {}", e.getMessage());
+//        }
+//    }
 
     /**
      * JSON과 2개의 S3 서명 키로 PDF를 생성
@@ -96,7 +100,14 @@ public class JsonToPdfService {
                             String sellerSignatureKey,
                             String buyerSignatureKey) throws Exception {
 
-        // XSS 방지: JSON 데이터 재귀적 살균
+        if (aiContractJson == null || aiContractJson.length() > MAX_JSON_SIZE) {
+            log.error("DoS 공격 의심: AI JSON 크기가 {}바이트를 초과했습니다. (Size: {})",
+                    MAX_JSON_SIZE, (aiContractJson == null ? 0 : aiContractJson.length()));
+            throw new IllegalArgumentException("AI가 생성한 계약서 데이터가 너무 큽니다.");
+        }
+
+
+        // --- 1. [보안] XSS 살균 (JSON -> 순수 텍스트 Map) ---
         Map<String, Object> contractMap = sanitizeJsonMap(aiContractJson);
 
         try (PDDocument document = new PDDocument();
@@ -156,10 +167,10 @@ public class JsonToPdfService {
 
             document.save(out);
 
-            byte[] pdfBytes = out.toByteArray();
-            // 테스트용: PDF를 바탕화면에 저장 (프로덕션 배포 전 제거 필요)
-            savePdfToDesktopForTesting(pdfBytes);
-
+            //나중에 삭제해야됨
+            //byte[] pdfBytes = out.toByteArray();
+            //savePdfToDesktopForTesting(pdfBytes);
+            //
             return out.toByteArray();
         }
     }
@@ -184,9 +195,7 @@ public class JsonToPdfService {
         }
     }
 
-    /**
-     * JSON 문자열을 Map으로 변환하고 XSS 공격 방지를 위해 재귀적으로 살균
-     */
+
     private Map<String, Object> sanitizeJsonMap(String jsonString) throws Exception {
         TypeReference<Map<String, Object>> typeRef = new TypeReference<>() {};
         Map<String, Object> map = objectMapper.readValue(jsonString, typeRef);
@@ -194,9 +203,7 @@ public class JsonToPdfService {
         return map;
     }
 
-    /**
-     * Map의 모든 String 값을 재귀적으로 XSS 살균
-     */
+    @SuppressWarnings("unchecked")
     private void sanitizeMapRecursively(Map<String, Object> map) {
         for (Map.Entry<String, Object> entry : map.entrySet()) {
             Object value = entry.getValue();
@@ -207,6 +214,21 @@ public class JsonToPdfService {
             }
         }
     }
+
+
+//    //map 데이터 타입 강제 변환 예외처리
+//    private void sanitizeMapRecursively(Map<String, Object> map) {
+//        for (Map.Entry<String, Object> entry : map.entrySet()) {
+//            Object value = entry.getValue();
+//            if (value instanceof String) {
+//                entry.setValue(xssSanitizer.sanitizeToPlainText((String) value));
+//            } else if (value instanceof Map) {
+//                sanitizeMapRecursively((Map<String, Object>) value);
+//            }
+//        }
+//    }
+
+    // --- PDF 텍스트 그리기를 위한 NPE-Safe 헬퍼 메서드들 ---
 
     /**
      * PDF에 텍스트를 그리기
