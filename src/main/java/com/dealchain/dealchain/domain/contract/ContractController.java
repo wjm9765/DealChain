@@ -150,7 +150,7 @@ public class ContractController {
 
                 String sellerSignKey = seller.getSignatureImage(); // S3 서명 이미지 키
                 String buyerSignKey = buyer.getSignatureImage();  // S3 서명 이미지 키
-                String aiJson = requestDto.getContract(); // AI 생성 계약서 JSON
+                String aiJson = requestDto.getContract(); // AI 생성 계약서 JSON,서비스 레이어에서 db와 값이 같은지 검증했기 때문에 그대로 사용
 
                 // JSON과 서명 이미지로 PDF 생성
                 byte[] pdfBytes = jsonToPdfService.createPdf(
