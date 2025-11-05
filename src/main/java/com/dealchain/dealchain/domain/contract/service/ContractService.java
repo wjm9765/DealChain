@@ -20,6 +20,9 @@ import com.dealchain.dealchain.domain.product.Product;
 import com.dealchain.dealchain.domain.product.ProductService;
 import com.dealchain.dealchain.domain.security.HashService;
 import com.dealchain.dealchain.domain.security.S3UploadService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,6 +59,7 @@ public class ContractService {
     private final AICreateContract aiCreateContract;
     private final ProductService productService;
     private final ContractDataRepository contractDataRepository;
+    private final ObjectMapper objectMapper;
 
     public ContractService(ContractRepository contractRepository, 
                           S3UploadService s3UploadService,
@@ -68,6 +72,7 @@ public class ContractService {
                            AICreateContract aiCreateContract,
                             ProductService productService,
                            ContractDataRepository contractDataRepository,
+                           ObjectMapper objectMapper,
                            AIHelpService aiHelpService) {
         this.contractRepository = contractRepository;
         this.s3UploadService = s3UploadService;
@@ -81,6 +86,7 @@ public class ContractService {
         this.aiCreateContract = aiCreateContract;
         this.productService = productService;
         this.contractDataRepository = contractDataRepository;
+        this.objectMapper=objectMapper;
     }
 
     public String getSummaryofContract(String contract){
@@ -233,6 +239,8 @@ public class ContractService {
                 requestDto.getDeviceInfo()
         );
 
+        //변경된 데이터 저장
+        contractDataRepository.save(contractData);
         // --- 5. [응답] ---
         // 수정된 '새' 계약서와 '새' 요약본을 반환
         return ContractResponseDto.builder()
@@ -272,8 +280,13 @@ public class ContractService {
                     .build();
         }
         String chatLog = chatPaser.buildSenderToContentsJsonByRoomId(roomId);
+
+
+        //id로 각 회원정보에 저장되어 있는 '이름'을 가져옴
+
         ContractDefaultReqeustDto default_request = ContractDefaultReqeustDto.builder()
                 .sellerId(sellerId).buyerId(buyerId).product(product).build();
+
 
         String aiContractJson = aiCreateContract.invokeClaude(chatLog, default_request);
         String summary = getSummaryofContract(aiContractJson);//요약 버전
@@ -426,10 +439,29 @@ public class ContractService {
 
         // 비교: 저장된 계약서와 전달된 계약서가 동일한지 확인
         //수정이 아니라 서명이라서 내용이 같아야 함
-        if (!decryptedContractJson.equals(contract)) {
+
+
+        try {
+            //  DB의 JSON 문자열을 JsonNode 객체로 변환
+            JsonNode dbContractNode = objectMapper.readTree(decryptedContractJson);
+            //  클라이언트가 전달한 JSON 문자열을 JsonNode 객체로 변환
+            JsonNode clientContractNode = objectMapper.readTree(contract);
+            System.out.println("dbContractNode: " + dbContractNode.toString());
+            System.out.println("clientContractNode: " + clientContractNode.toString());
+            //  두 JSON 객체의 구조와 값이 완전히 동일한지 비교 수행
+            if (!dbContractNode.equals(clientContractNode)) {
+                log.warn("계약서 서명 시도 중 내용 불일치 감지. RoomId: {}", roomId);
+                return SignResponseDto.builder()
+                        .isSuccess(false)
+                        .data("BadRequest: 저장된 계약서 내용이 다릅니다.")
+                        .build();
+            }
+        } catch (JsonProcessingException e) {
+            //  만약 전달된 'contract' 문자열이 유효한 JSON이 아니라면 파싱 예외 발생
+            log.error("계약서 JSON 파싱 실패 (RoomId: {}): {}", roomId, e.getMessage());
             return SignResponseDto.builder()
                     .isSuccess(false)
-                    .data("BadRequest: 저장된 계약서 내용이 다릅니다.")
+                    .data("ServerError: 계약서 데이터(JSON) 파싱에 실패했습니다.")
                     .build();
         }
 

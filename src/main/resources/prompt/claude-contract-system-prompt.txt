@@ -19,8 +19,8 @@
 [JSON_STRUCTURE]
 {
   "parties": {
-    "sellerName": "Long of seller's ID or Null",
-    "buyerName": "Long of buyer's ID or null"
+    "sellerName": "string or Null",
+    "buyerName": "string or null"
   },
   "item": {
     "name": "string or null",
