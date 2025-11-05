@@ -1,21 +1,17 @@
 package com.dealchain.dealchain.domain.contract;
 
-import com.dealchain.dealchain.domain.AI.dto.ContractDefaultReqeustDto;
-import com.dealchain.dealchain.domain.AI.service.AICreateContract;
-import com.dealchain.dealchain.domain.AI.service.ChatPaser;
+
 import com.dealchain.dealchain.domain.chat.entity.ChatRoom;
 import com.dealchain.dealchain.domain.chat.repository.ChatRoomRepository;
 import com.dealchain.dealchain.domain.contract.dto.*;
-import com.dealchain.dealchain.domain.contract.entity.Contract;
+
 import com.dealchain.dealchain.domain.contract.entity.ContractData;
-import com.dealchain.dealchain.domain.contract.entity.SignTable;
+
 import com.dealchain.dealchain.domain.contract.repository.ContractDataRepository;
 import com.dealchain.dealchain.domain.contract.service.ContractService;
 import com.dealchain.dealchain.domain.contract.service.JsonToPdfService;
 import com.dealchain.dealchain.domain.member.Member;
 import com.dealchain.dealchain.domain.member.MemberRepository;
-import com.dealchain.dealchain.domain.product.Product;
-import com.dealchain.dealchain.domain.product.ProductService;
 import com.dealchain.dealchain.util.ByteArrayMultipartFile;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
@@ -28,6 +24,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -39,11 +36,11 @@ import javax.swing.text.html.Option;
 @RestController
 @RequestMapping("/api/contracts")
 public class ContractController {
-    private final ContractService contractService;
-//    private final ChatPaser chatPaser;
+    //    private final ChatPaser chatPaser;
 //    private final AICreateContract AICreateContract;
 //    private final ProductService productService;
     private final ChatRoomRepository chatRoomRepository;
+    private final ContractService contractService;
     private final JsonToPdfService jsonToPdfService;
     private final MemberRepository memberRepository;
     private final ContractDataRepository contractDataRepository;
@@ -347,38 +344,78 @@ public class ContractController {
 //        }
 //    }
 
-    /**
-     * ID로 계약서를 조회하고 S3에서 PDF를 다운로드하여 반환합니다.
-     *
-     * GET /api/contracts/{id}
-     */
-    @GetMapping("/{id}")
-    public ResponseEntity<byte[]> getContractPdf(@PathVariable("id") Long id) {
+    @GetMapping("/contractLists")
+    public ResponseEntity<?> getContractLists( // 반환 타입을 '?' (와일드카드)로 변경
+                                               @RequestParam("roomId") String roomId,
+                                               @RequestHeader(value = "User-Agent", defaultValue = "Unknown") String deviceInfo) {
+
         try {
-            ContractService.ContractPdfResult result = contractService.getContractPdf(id);
+            List<ContractInfoResponseDto> contractList = contractService.getMyContracts();
 
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_PDF);
-            headers.setContentLength(result.getPdfBytes().length);
-            headers.setContentDispositionFormData("attachment", "contract_" + id + ".pdf");
+            return ResponseEntity.ok(contractList);
 
-            return new ResponseEntity<>(result.getPdfBytes(), headers, HttpStatus.OK);
+        } catch (SecurityException e) {
+
+            return ResponseEntity
+                    .status(HttpStatus.FORBIDDEN) // 403 Forbidden
+                    .body(e.getMessage());
+
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.notFound().build();
+            // [입력값 오류] 존재하지 않는 roomId 등
+            return ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST) // 400 Bad Request
+                    .body(e.getMessage());
+
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            // [서버 내부 오류] 그 외 모든 예외
+            log.error("계약서 목록 조회 중 알 수 없는 오류 발생", e);
+            return ResponseEntity
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR) // 500 Internal Server Error
+                    .body("서버 내부 오류가 발생했습니다.");
+        }
+    }
+    //계약서 상세 조회
+    @GetMapping("/detail")
+    public ResponseEntity<?> getContractDetailByRoomId(
+            @RequestParam("roomId") String roomId,
+            @RequestHeader(value = "User-Agent", defaultValue = "Unknown") String deviceInfo) {
+
+        try {
+            // 1. [호출] roomId로 통합 서비스 호출
+            ContractService.GetContractResponse response = contractService.getContractByRoomId(roomId, deviceInfo);
+
+            // 2. [분기] 서비스가 반환한 DTO의 contentType을 확인
+            if ("application/pdf".equals(response.getContentType())) {
+                // [PDF 응답]
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.APPLICATION_PDF);
+                // "inline"은 브라우저에서 바로 열기, "attachment"는 다운로드
+                headers.setContentDispositionFormData("inline", "contract_" + roomId + ".pdf");
+                return ResponseEntity.ok()
+                        .headers(headers)
+                        .body(response.getPdfBytes());
+            } else {
+                // [JSON 응답] (복호화된 JSON 문자열)
+                return ResponseEntity.ok()
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(response.getContractData());
+            }
+
+        } catch (SecurityException e) {
+            // [인가 실패]
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getMessage());
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            // [데이터 오류] (e.g., roomId 없음, 계약서 없음)
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
+        } catch (Exception e) {
+            // [서버 내부 오류] (e.g., 복호화 실패, S3 실패)
+            log.error("계약서 상세 조회 중 알 수 없는 오류 발생 (RoomId: {})", roomId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("서버 오류가 발생했습니다.");
         }
     }
 
-    /**
-     * 계약서 생성 로직
-     *
-     * POST /api/contracts/create
-     * @param requestDto (ContractCreateRequestDto: roomId 포함)
-     * @return ContractResponseDto (isSuccess, data: AI가 생성한 JSON 문자열)
-     **/
 
-
+    //계약서 거절 버튼 -> 서명 초기화
     @PostMapping("/reject")
     public ResponseEntity<SignResponseDto> rejectContract(
             @RequestBody ContractCreateRequestDto requestDto) {

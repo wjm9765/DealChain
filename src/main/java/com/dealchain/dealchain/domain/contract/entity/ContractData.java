@@ -11,16 +11,14 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
 
-/**
- * AI가 생성한 '계약서 초안 (JSON)'을 저장하는 엔티티
- * 'java 시큐어 코딩 가이드' (220p)를 준수하기 위해,
- * '조회용 식별자'와 '암호화된 데이터'를 분리하여 관리합니다.
- */
+
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @EntityListeners(AuditingEntityListener.class)
 @Entity
-@Table(name = "contract_data")
+@Table(name = "contract_data", uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"roomId"})
+})
 public class ContractData {
 
     @Id
