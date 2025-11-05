@@ -425,6 +425,7 @@ public class ContractService {
         }
 
         // 비교: 저장된 계약서와 전달된 계약서가 동일한지 확인
+        //수정이 아니라 서명이라서 내용이 같아야 함
         if (!decryptedContractJson.equals(contract)) {
             return SignResponseDto.builder()
                     .isSuccess(false)
