@@ -263,7 +263,14 @@ public class ContractService {
             throw new SecurityException("당신은 이 거래의 당사자가 아닙니다.");
         }
 
-
+        if(isCallerBuyer) {//만약 구매자가 요청했으면 AI 호출하지 않고 바로 return
+            sendContractRequestNotification(sellerId, roomId, buyerId, "계약서 검토 요청이 있습니다.");//구매자에게 알림 전송
+            return ContractResponseDto.builder()
+                    .isSuccess(true)
+                    .data("계약서 생성 요청을 판매자에게 보냈습니다.")
+                    .summary(null)
+                    .build();
+        }
         String chatLog = chatPaser.buildSenderToContentsJsonByRoomId(roomId);
         ContractDefaultReqeustDto default_request = ContractDefaultReqeustDto.builder()
                 .sellerId(sellerId).buyerId(buyerId).product(product).build();
@@ -304,13 +311,6 @@ public class ContractService {
                     .summary(summary)
                     .build();
 
-        } else if(isCallerBuyer){
-            sendContractRequestNotification(sellerId, roomId, buyerId,"계약서 검토 요청이 있습니다.");//구매자에게 알림 전송
-            return ContractResponseDto.builder()
-                    .isSuccess(true)
-                    .data("계약서 생성 요청을 판매자에게 보냈습니다.")
-                    .summary(null)
-                    .build();
         }
         else{
             throw new SecurityException("알 수 없는 에러 발생");

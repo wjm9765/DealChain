@@ -30,11 +30,8 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(request -> {
                     CorsConfiguration config = new CorsConfiguration();
 
-                    // [핵심] 2학년 학부생님의 로컬 프론트엔드 주소
-                    config.setAllowedOrigins(List.of(
-                            "http://localhost:*"
-                            // (필요시 다른 프론트엔드 도메인도 추가)
-                    ));
+                    //나중에 삭제 필요
+                    config.setAllowedOriginPatterns(List.of("http://localhost:*"));
 
                     config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
                     config.setAllowedHeaders(List.of("*"));
