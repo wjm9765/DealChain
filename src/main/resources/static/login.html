@@ -47,6 +47,13 @@
         <label for="inputPassword">Password</label>
         <input id="inputPassword" type="password" placeholder="password" />
       </div>
+
+      <!-- 로그인 버튼 추가: id/password를 JSON으로 전송하여 JWT 토큰을 받음 -->
+      <div class="form-row" style="margin-top:8px;">
+        <button id="loginBtn" class="btn btn-primary">Login (POST /api/members/login)</button>
+        <div id="loginResult" style="display:inline-block;margin-left:12px;color:#222;"></div>
+      </div>
+
       <div class="form-row">
         <label for="inputToken">Token</label>
         <input id="inputToken" type="text" placeholder="(인증 후 자동 채움)" />
@@ -62,6 +69,9 @@
     </div>
 
     <div id="resultArea"></div>
+    <!-- 폴백 제출용 숨은 iframe -->
+    <iframe id="regFrame" name="regFrame" style="display:none"></iframe>
+
     <div id="debugStatus" style="margin-top:8px;font-size:13px;color:#222;"></div>
     <div style="margin-top:6px;">
       <a id="verifyManualLink" href="#" target="_blank" style="color:#1976d2;display:inline-block;margin-top:6px;">(수동) Verify URL 열기</a>
@@ -85,6 +95,10 @@
       const VERIFY_HOST = 'http://mockapi-env.eba-mpd9wfbe.ap-northeast-2.elasticbeanstalk.com/'; // 로컬 테스트용(필요시 https로 변경)
       const VERIFY_PATH = '/verify';
       const REDIRECT_TO = 'http://localhost:63342/dealchain/dealchain.main/static/login.html';
+      // 회원가입 API (원격) - 필요 시 여기를 바꿔서 사용
+      const REGISTER_API = 'http://dealchain-env.eba-tpa3rca3.ap-northeast-2.elasticbeanstalk.com/api/members/register';
+      // 로그인 API (원격) - JSON body로 id/password 전송
+      const LOGIN_API = 'http://dealchain-env.eba-tpa3rca3.ap-northeast-2.elasticbeanstalk.com/api/members/login';
 
       // 엘리먼트와 상태
       const verifyBtn = document.getElementById('verifyBtn');
@@ -96,6 +110,8 @@
       const inputToken = document.getElementById('inputToken');
       const sendRegisterBtn = document.getElementById('sendRegisterBtn');
       const registerResult = document.getElementById('registerResult');
+      const loginBtn = document.getElementById('loginBtn');
+      const loginResult = document.getElementById('loginResult');
 
       let popupRef = null;
       let lastVerifyPayload = null;
@@ -171,6 +187,45 @@
         if(payload.token){ try{ if(popupRef && !popupRef.closed) popupRef.close(); }catch(e){} showResult(payload.status||'success', payload.token, payload); return; }
       });
 
+      // Login 전송 (JSON)
+      if(loginBtn) loginBtn.addEventListener('click', async ()=>{
+        const id = inputId.value;
+        const password = inputPassword.value;
+        if(!id || !password){ loginResult.textContent = 'ID, Password 필요'; return; }
+        loginResult.textContent = '로그인 중...';
+        try{
+          const resp = await fetch(LOGIN_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: id, password: password })
+          });
+          const text = await resp.text();
+          let parsed = null;
+          try{ parsed = text ? JSON.parse(text) : null; } catch(e){ parsed = null; }
+
+          if(parsed && typeof parsed === 'object'){
+            // 가능한 토큰 필드들 확인
+            const token = parsed.token || parsed.accessToken || parsed.jwt || parsed.authorization || parsed.authToken || parsed.data?.token || parsed.result?.token;
+            if(token){
+              loginResult.innerHTML = '토큰: <code>' + token + '</code>';
+              // 자동으로 토큰을 register token input에 채움
+              try{ inputToken.value = token; }catch(e){}
+              // 복사 버튼
+              const copyBtn = document.createElement('button'); copyBtn.className='btn btn-ghost'; copyBtn.textContent='복사'; copyBtn.onclick = ()=>navigator.clipboard.writeText(token).then(()=>alert('복사됨'));
+              loginResult.appendChild(copyBtn);
+            } else {
+              loginResult.textContent = '로그인 응답 수신(토큰 없음): ' + JSON.stringify(parsed);
+            }
+          } else {
+            // 비JSON 응답이면 텍스트 기반 결과 표시
+            if(resp.ok){ loginResult.textContent = '로그인 성공 (응답이 JSON 아님)'; } else { loginResult.textContent = '로그인 실패: HTTP ' + resp.status + ' - ' + (text||''); }
+          }
+        } catch(e){
+          console.error('login error', e);
+          loginResult.textContent = '로그인 요청 실패: ' + (e && e.message);
+        }
+      });
+
       // Register 전송
       if(sendRegisterBtn) sendRegisterBtn.addEventListener('click', async ()=>{
         const id = inputId.value;
@@ -196,7 +251,8 @@
             fd.append('signatureImage', signatureFile);
           }
 
-          const resp = await fetch('http://localhost:8080/api/members/register', {
+          // 우선 fetch 시도 (CORS가 허용되어 있으면 이 경로가 정상 동작)
+          const resp = await fetch(REGISTER_API, {
             method: 'POST',
             body: fd // 브라우저가 Content-Type과 boundary를 자동으로 설정
           });
@@ -248,9 +304,64 @@
             console.error('Response handling error', e);
           }
          } catch(e) {
-           registerResult.textContent='전송 실패: ' + (e && e.message);
+           // fetch가 CORS로 차단되거나 네트워크 에러인 경우 폴백으로 form/iframe 제출 시도
+           console.warn('Fetch failed, attempting iframe form fallback:', e && e.message);
+           registerResult.textContent = 'Fetch 실패(또는 CORS 차단). iframe 폼 제출로 대체합니다...';
+           try {
+             fallbackSubmitViaForm(REGISTER_API, { id, password, token }, signatureFile);
+             alert('서버가 CORS를 허용하지 않아 자동 응답을 읽을 수 없습니다. 요청은 서버로 전송되었으며, 서버에서 처리 결과를 확인하세요.');
+           } catch (fe) {
+             registerResult.textContent='폴백 제출 실패: ' + (fe && fe.message);
+           }
          }
        });
+
+      // 폴백: iframe을 사용해 multipart/form-data 요청을 전송
+      function fallbackSubmitViaForm(actionUrl, fields, fileInputFile) {
+        // Create form
+        const form = document.createElement('form');
+        form.action = actionUrl;
+        form.method = 'POST';
+        form.enctype = 'multipart/form-data';
+        form.target = 'regFrame';
+
+        // Hidden inputs for text fields
+        for (const key in fields) {
+          const inp = document.createElement('input');
+          inp.type = 'hidden';
+          inp.name = key;
+          inp.value = fields[key] ?? '';
+          form.appendChild(inp);
+        }
+
+        // Move the existing file input element into form so its file value is preserved
+        const originalFileInput = document.getElementById('inputSignature');
+        const originalParent = originalFileInput.parentNode;
+        const originalNext = originalFileInput.nextSibling;
+        form.appendChild(originalFileInput);
+
+        // Append form to body and submit
+        document.body.appendChild(form);
+        // Listen for iframe load (간단 알림용)
+        const iframe = document.getElementById('regFrame');
+        const onLoad = () => {
+          try { alert('서버 응답(iframe) 도착: 외부 도메인이라 응답 내용을 읽을 수 없습니다.'); } catch (e) {}
+          // cleanup listener
+          iframe.removeEventListener('load', onLoad);
+        };
+        iframe.addEventListener('load', onLoad);
+        form.submit();
+
+        // 복원: 파일 input을 원래 위치로 되돌림 (짧은 지연 후)
+        setTimeout(() => {
+          try {
+            if (originalNext) originalParent.insertBefore(originalFileInput, originalNext);
+            else originalParent.appendChild(originalFileInput);
+          } catch (e) { console.warn('file input restore failed', e); }
+          // remove the temporary form
+          try { document.body.removeChild(form); } catch (e) {}
+        }, 500);
+      }
 
       // 초기화
       try{ if(window.location){ const params = parseQueryFromUrl(window.location.href); if(params.token||params.status) showResult(params.status||'success', params.token, params); }
