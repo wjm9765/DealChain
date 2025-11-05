@@ -446,8 +446,8 @@ public class ContractService {
             JsonNode dbContractNode = objectMapper.readTree(decryptedContractJson);
             //  클라이언트가 전달한 JSON 문자열을 JsonNode 객체로 변환
             JsonNode clientContractNode = objectMapper.readTree(contract);
-            System.out.println("dbContractNode: " + dbContractNode.toString());
-            System.out.println("clientContractNode: " + clientContractNode.toString());
+            //System.out.println("dbContractNode: " + dbContractNode.toString());
+            //System.out.println("clientContractNode: " + clientContractNode.toString());
             //  두 JSON 객체의 구조와 값이 완전히 동일한지 비교 수행
             if (!dbContractNode.equals(clientContractNode)) {
                 log.warn("계약서 서명 시도 중 내용 불일치 감지. RoomId: {}", roomId);
