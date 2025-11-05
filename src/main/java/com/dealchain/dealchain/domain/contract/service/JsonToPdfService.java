@@ -62,32 +62,6 @@ public class JsonToPdfService {
         }
     }
 
-
-//    //나중에 삭제해야됨,테스트용 함수
-//    private void savePdfToDesktopForTesting(byte[] pdfBytes) {
-//        try {
-//            // [보안] 'resources'가 아닌 '사용자 홈 디렉토리' (예: C:\Users\YourUser 또는 /home/YourUser)
-//            String userHome = System.getProperty("user.home");
-//            String desktopPath = userHome + "/Desktop"; // 바탕화면 경로
-//            String filePath = desktopPath + "/test_contract.pdf";
-//
-//            log.warn("--- [테스트 전용 보안 경고] ---");
-//            log.warn("'java 시큐어 코딩 가이드' (84p) 위반: 민감한 PDF를 서버 디스크에 저장합니다.");
-//            log.warn("저장 위치: {}", filePath);
-//            log.warn("프로덕션 배포 전 이 'savePdfToDesktopForTesting' 호출 코드를 반드시 제거하십시오.");
-//            log.warn("------------------------------");
-//
-//            // '디스크'에 파일 쓰기 (C++의 fwrite와 유사)
-//            try (FileOutputStream fos = new FileOutputStream(filePath)) {
-//                fos.write(pdfBytes);
-//            }
-//
-//        } catch (Exception e) {
-//            // 테스트용 저장이 실패해도, 메인 로직(S3 업로드)은 중단되면 안 됨.
-//            log.error("테스트용 PDF 파일 저장 실패 (메인 로직 계속 진행): {}", e.getMessage());
-//        }
-//    }
-
     /**
      * JSON과 2개의 S3 서명 키로 PDF를 생성
      *
@@ -215,20 +189,6 @@ public class JsonToPdfService {
         }
     }
 
-
-//    //map 데이터 타입 강제 변환 예외처리
-//    private void sanitizeMapRecursively(Map<String, Object> map) {
-//        for (Map.Entry<String, Object> entry : map.entrySet()) {
-//            Object value = entry.getValue();
-//            if (value instanceof String) {
-//                entry.setValue(xssSanitizer.sanitizeToPlainText((String) value));
-//            } else if (value instanceof Map) {
-//                sanitizeMapRecursively((Map<String, Object>) value);
-//            }
-//        }
-//    }
-
-    // --- PDF 텍스트 그리기를 위한 NPE-Safe 헬퍼 메서드들 ---
 
     /**
      * PDF에 텍스트를 그리기

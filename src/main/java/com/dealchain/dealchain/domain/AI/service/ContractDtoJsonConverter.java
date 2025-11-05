@@ -17,8 +17,8 @@ public class ContractDtoJsonConverter {
     public static String toJson(ContractDefaultReqeustDto dto) {
         String productStr = buildProductString(dto);
         Map<String, Object> out = new HashMap<>();
-        out.put("sellerId", dto.getSellerId());
-        out.put("buyerId", dto.getBuyerId());
+        out.put("sellerName", dto.getSeller_name());
+        out.put("buyerName", dto.getBuyer_name());
         out.put("product", productStr);
         try {
             return MAPPER.writeValueAsString(out);
@@ -30,9 +30,11 @@ public class ContractDtoJsonConverter {
     private static String buildProductString(ContractDefaultReqeustDto dto) {
         Product p = dto.getProduct();
         StringBuilder sb = new StringBuilder();
+
+
         sb.append("<product>\n");
-        sb.append("\"sellerId\":").append(dto.getSellerId()).append("\n");
-        sb.append("\"buyerId\":").append(dto.getBuyerId()).append("\n");
+        sb.append("\"sellerId\":").append(dto.getSeller_name()).append("\n");
+        sb.append("\"buyerId\":").append(dto.getBuyer_name()).append("\n");
         if (p != null) {
             if (p.getId() != null) sb.append("\"id\":").append(p.getId()).append("\n");
             appendQuoted(sb, "productName", p.getProductName());
@@ -43,6 +45,7 @@ public class ContractDtoJsonConverter {
             // productImage 제외
         }
         sb.append("</product>");
+
         return sb.toString();
     }
 

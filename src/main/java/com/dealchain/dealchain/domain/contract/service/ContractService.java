@@ -3,6 +3,8 @@ package com.dealchain.dealchain.domain.contract.service;
 import com.dealchain.dealchain.domain.AI.dto.ContractDefaultReqeustDto;
 import com.dealchain.dealchain.domain.contract.dto.*;
 import com.dealchain.dealchain.domain.contract.repository.ContractDataRepository;
+import com.dealchain.dealchain.domain.member.Member;
+import com.dealchain.dealchain.domain.member.MemberRepository;
 import com.dealchain.dealchain.util.EncryptionUtil;
 import com.dealchain.dealchain.domain.AI.service.AICreateContract;
 import com.dealchain.dealchain.domain.AI.service.AIHelpService;
@@ -60,7 +62,7 @@ public class ContractService {
     private final ProductService productService;
     private final ContractDataRepository contractDataRepository;
     private final ObjectMapper objectMapper;
-
+    private final MemberRepository memberRepository;
     public ContractService(ContractRepository contractRepository, 
                           S3UploadService s3UploadService,
                           HashService hashService,
@@ -72,6 +74,7 @@ public class ContractService {
                            AICreateContract aiCreateContract,
                             ProductService productService,
                            ContractDataRepository contractDataRepository,
+                           MemberRepository memberRepository,
                            ObjectMapper objectMapper,
                            AIHelpService aiHelpService) {
         this.contractRepository = contractRepository;
@@ -87,6 +90,7 @@ public class ContractService {
         this.productService = productService;
         this.contractDataRepository = contractDataRepository;
         this.objectMapper=objectMapper;
+        this.memberRepository = memberRepository;
     }
 
     public String getSummaryofContract(String contract){
@@ -283,9 +287,15 @@ public class ContractService {
 
 
         //id로 각 회원정보에 저장되어 있는 '이름'을 가져옴
+        String sellerName = memberRepository.findNameById(sellerId)
+                .orElseThrow(() -> new IllegalArgumentException("판매자 정보를 찾을 수 없습니다. sellerId=" + sellerId));
+        String buyerName = memberRepository.findNameById(buyerId)
+                .orElseThrow(() -> new IllegalArgumentException("구매자 정보를 찾을 수 없습니다. buyerId=" + buyerId));
+
+
 
         ContractDefaultReqeustDto default_request = ContractDefaultReqeustDto.builder()
-                .sellerId(sellerId).buyerId(buyerId).product(product).build();
+                .seller_name(sellerName).buyer_name(buyerName).product(product).build();
 
 
         String aiContractJson = aiCreateContract.invokeClaude(chatLog, default_request);
