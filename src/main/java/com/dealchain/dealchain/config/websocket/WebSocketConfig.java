@@ -33,7 +33,13 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     // prefix로 sub이 붙으면 구독(메시지를 받는거임), pub이 붙으면 메시지 송신
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
-        registry.enableSimpleBroker("/sub");
+
+        //  "/sub"(공개 채팅) 외에 "/queue"(사적 알림)도 브로커가 처리하도록 추가
+        registry.enableSimpleBroker("/sub", "/queue");
+
         registry.setApplicationDestinationPrefixes("/pub");
+
+        //유저한테 개인 알림
+        registry.setUserDestinationPrefix("/user");
     }
 }
