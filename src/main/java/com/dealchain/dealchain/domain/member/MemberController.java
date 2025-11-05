@@ -39,6 +39,14 @@ public class MemberController {
             @RequestParam("token") String token,
             @RequestParam(value = "signatureImage", required = false) MultipartFile signatureImage) {
         try {
+            // 비밀번호 길이 검증 (8자 이상)
+            if (password == null || password.length() < 8) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "비밀번호는 8자 이상이어야 합니다.");
+                return ResponseEntity.badRequest().body(response);
+            }
+            
             if (signatureImage == null || signatureImage.isEmpty()) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
