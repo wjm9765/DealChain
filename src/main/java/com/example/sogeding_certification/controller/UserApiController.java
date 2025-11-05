@@ -5,7 +5,6 @@ import com.example.sogeding_certification.dto.UserResponse;
 import com.example.sogeding_certification.service.TokenService;
 import com.example.sogeding_certification.service.UserService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,7 +28,7 @@ public class UserApiController {
         return ResponseEntity.ok(response);
     }
 
-    @GetMapping("/token/{token}")
+    @GetMapping("/verify/{token}")
     public ResponseEntity<Map<String, Object>> getTokenData(@PathVariable String token) {
         TokenService.TokenData data = tokenService.getTokenData(token);
         if (data != null) {
@@ -44,7 +43,8 @@ public class UserApiController {
                     "success", false,
                     "message", "유효하지 않거나 만료된 토큰입니다"
             );
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+            // 404 대신 200 OK를 반환하여 클라이언트가 response body를 읽을 수 있도록 함
+            return ResponseEntity.ok(response);
         }
     }
 }

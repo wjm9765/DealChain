@@ -12,7 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class TokenService {
     private final Map<String, TokenData> tokenStore = new ConcurrentHashMap<>();
 
-    public String generateToken(String name, Long ci) {
+    public String generateToken(String name, String ci) {
         String token = UUID.randomUUID().toString();
         tokenStore.put(token, new TokenData(name, ci));
         return token;
@@ -26,6 +26,6 @@ public class TokenService {
     @AllArgsConstructor
     public static class TokenData {
         private String name;
-        private Long ci;
+        private String ci;
     }
 }

@@ -12,7 +12,7 @@ public class UserResponse {
     private String message;
     private String redirectUrl;
     private String name;
-    private Long ci;
+    private String ci;
 }
 
 
