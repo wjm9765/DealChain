@@ -8,6 +8,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -40,25 +43,56 @@ public class MemberService {
                 throw new IllegalArgumentException("이미 사용 중인 아이디입니다.");
             }
 
-            // token으로 verify.api.url/{token}에 GET 요청 보내서 name, ci 받아오기
-            String tokenUrl = verifyApiUrl + "/" + token;
-            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
-                tokenUrl,
-                HttpMethod.GET,
-                null,
-                new ParameterizedTypeReference<Map<String, Object>>() {}
-            );
+            String name = null;
+            String ci = null;
             
-            Map<String, Object> responseBody = response.getBody();
-            if (responseBody == null || !Boolean.TRUE.equals(responseBody.get("success"))) {
-                throw new IllegalArgumentException("유효하지 않거나 만료된 토큰입니다.");
-            }
-            
-            String name = (String) responseBody.get("name");
-            String ci = (String) responseBody.get("ci");
-            
-            if (name == null || ci == null) {
-                throw new IllegalArgumentException("토큰에서 이름 또는 CI 정보를 가져올 수 없습니다.");
+            try {
+                String tokenUrl = verifyApiUrl + "/" + token;
+                ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                    tokenUrl,
+                    HttpMethod.GET,
+                    null,
+                    new ParameterizedTypeReference<Map<String, Object>>() {}
+                );
+                
+                Map<String, Object> responseBody = response.getBody();
+
+                if (responseBody == null) {
+                    throw new IllegalArgumentException("유효하지 않거나 만료된 토큰입니다.");
+                }
+                
+                name = (String) responseBody.get("name");
+                ci = (String) responseBody.get("ci");
+                
+                if (name == null || ci == null) {
+                    throw new IllegalArgumentException("토큰에서 이름 또는 CI 정보를 가져올 수 없습니다.");
+                }
+            } catch (HttpClientErrorException e) {
+                // 4xx 에러 (클라이언트 오류)
+                System.out.println("HTTP Client Error: " + e.getStatusCode());
+                System.out.println("Response Body: " + e.getResponseBodyAsString());
+                e.printStackTrace(); // 스택 트레이스 출력
+                if (e.getStatusCode().value() == 404) {
+                    throw new IllegalArgumentException("유효하지 않거나 만료된 토큰입니다.");
+                }
+                throw new IllegalArgumentException("토큰 검증 중 오류가 발생했습니다: " + e.getMessage() + " - " + e.getResponseBodyAsString());
+            } catch (HttpServerErrorException e) {
+                // 5xx 에러 (서버 오류)
+                System.out.println("HTTP Server Error: " + e.getStatusCode());
+                System.out.println("Response Body: " + e.getResponseBodyAsString());
+                e.printStackTrace();
+                throw new RuntimeException("인증 서버 오류가 발생했습니다: " + e.getMessage(), e);
+            } catch (ResourceAccessException e) {
+                // 네트워크 오류
+                System.out.println("Resource Access Error: " + e.getMessage());
+                e.printStackTrace();
+                throw new RuntimeException("인증 서버에 연결할 수 없습니다: " + e.getMessage(), e);
+            } catch (Exception e) {
+                // 모든 예외를 로깅
+                System.out.println("Unexpected Exception: " + e.getClass().getName());
+                System.out.println("Exception Message: " + e.getMessage());
+                e.printStackTrace();
+                throw new RuntimeException("토큰 검증 중 예상치 못한 오류: " + e.getMessage(), e);
             }
 
             // 비밀번호 암호화
@@ -75,11 +109,10 @@ public class MemberService {
             return memberRepository.save(member);
         } catch (IllegalArgumentException e) {
             throw e;
+        } catch (RuntimeException e) {
+            throw e;
         } catch (Exception e) {
-            if (e instanceof IllegalArgumentException) {
-                throw e;
-            }
-            throw new RuntimeException("회원가입 중 오류가 발생했습니다.", e);
+            throw new RuntimeException("회원가입 중 오류가 발생했습니다: " + e.getMessage(), e);
         }
     }
 

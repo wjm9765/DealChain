@@ -66,6 +66,8 @@ public class MemberController {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
             response.put("message", "회원가입 중 오류가 발생했습니다.");
+            // 로그에도 출력
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
