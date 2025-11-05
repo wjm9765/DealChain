@@ -32,7 +32,7 @@ public class SecurityConfig {
 
                     // [핵심] 2학년 학부생님의 로컬 프론트엔드 주소
                     config.setAllowedOrigins(List.of(
-                            "http://localhost:63342"
+                            "http://localhost:*"
                             // (필요시 다른 프론트엔드 도메인도 추가)
                     ));
 
