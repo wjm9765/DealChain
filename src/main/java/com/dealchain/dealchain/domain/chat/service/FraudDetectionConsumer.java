@@ -2,6 +2,7 @@
 package com.dealchain.dealchain.domain.chat.service;
 
 import com.dealchain.dealchain.domain.AI.service.ChatPaser;
+import com.dealchain.dealchain.domain.AI.service.SageMakerService;
 import com.dealchain.dealchain.domain.chat.dto.SQSrequestDto;
 import com.dealchain.dealchain.domain.chat.entity.ChatRoom;
 import com.dealchain.dealchain.domain.chat.repository.ChatRoomRepository;
@@ -10,12 +11,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.awspring.cloud.sqs.annotation.SqsListener;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
-import software.amazon.awssdk.services.sqs.SqsAsyncClient;
 
 import java.util.*;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -26,26 +29,31 @@ public class FraudDetectionConsumer {
     private static final String FRAUD_DETECTION_QUEUE = "my-fraud-queue";
 
     private final ObjectMapper objectMapper;
-    private final SqsAsyncClient sqsAsyncClient;
     private final ContractService contractService;
     private final ChatRoomRepository chatRoomRepository;
     private final ChatPaser chatPaser;
+    private final SageMakerService sageMakerService;
+
+    @Value("${MESSAGE_COUNT}")
+    private int batchSize;
+
+    // 내부 버퍼: SQSrequestDto들을 쌓아둔다
+    private final BlockingQueue<SQSrequestDto> buffer = new LinkedBlockingQueue<>();
 
     @SqsListener(
             value = FRAUD_DETECTION_QUEUE,
             factory = "batchSqsListenerContainerFactory"
     )
     public void receiveFraudDetectionMessages(@Payload List<Message<String>> messages) {
-        log.info("SQS에서 {}개의 메시지 배치를 수신했습니다.", messages.size());
-        if (messages.isEmpty()) {
+        if (messages == null || messages.isEmpty()) {
             return;
         }
+        log.info("SQS에서 {}개의 메시지 수신.", messages.size());
 
-        List<SQSrequestDto> parsedDtos = new ArrayList<>();
         for (Message<String> msg : messages) {
             String payload = msg.getPayload();
             if (payload == null || payload.trim().isEmpty()) {
-                log.warn("빈 페이로드 메시지 건너뜀. headers={}", msg.getHeaders());
+                log.warn("빈 페이로드 건너뜀. headers={}", msg.getHeaders());
                 continue;
             }
             try {
@@ -55,21 +63,33 @@ public class FraudDetectionConsumer {
                     continue;
                 }
                 if (isValid(dto)) {
-                    parsedDtos.add(dto);
+                    buffer.offer(dto);
                 } else {
                     log.warn("유효하지 않은 SQS 메시지: {}", dto);
                 }
             } catch (Exception e) {
                 log.error("SQS 메시지 파싱 실패. payload={}", payload, e);
-
             }
         }
 
-        if (parsedDtos.isEmpty()) {
-            log.info("유효한 메시지 없음. 처리 종료.");
+        // 버퍼에 batchSize 이상 모였으면 하나 또는 여러 배치 처리
+        while (buffer.size() >= Math.max(1, batchSize)) {
+            processBatchFromBuffer(batchSize);
+        }
+    }
+
+    private void processBatchFromBuffer(int limit) {
+        List<SQSrequestDto> drainList = new ArrayList<>(limit);
+        buffer.drainTo(drainList, limit);
+        if (drainList.isEmpty()) {
             return;
         }
+        log.info("버퍼에서 {}개 꺼내 처리 시작.", drainList.size());
+        processDtos(drainList);
+    }
 
+
+    private void processDtos(List<SQSrequestDto> parsedDtos) {
         Map<String, List<SQSrequestDto>> messagesByRoom = parsedDtos.stream()
                 .collect(Collectors.groupingBy(SQSrequestDto::getRoomId));
 
@@ -77,13 +97,14 @@ public class FraudDetectionConsumer {
             String roomId = entry.getKey();
             List<SQSrequestDto> roomMessages = entry.getValue();
             try {
+                log.info("AI 사기 탐지 모델 호출 예정. RoomId: {}, MessageCount: {}", roomId, roomMessages.size());
                 String chatLog = chatPaser.buildSenderToContentsJsonByRoomId(roomId);
 
 
-                log.info("AI 사기 탐지 모델 호출 예정. RoomId: {}, MessageCount: {}", roomId, roomMessages.size());
+                //AI 사기 탐지 모델 호출
+                //String AIContent = sageMakerService.invokeEndpoint(chatLog);
+                System.out.println("5개 메시지 = " + chatLog);
 
-                System.out.println("테스트!!!!!!!!: " + chatLog);
-                //AI 탐지
 
                 Optional<ChatRoom> chatRoomOpt = chatRoomRepository.findById(roomId);
                 if (chatRoomOpt.isEmpty()) {
@@ -103,8 +124,6 @@ public class FraudDetectionConsumer {
                 throw e instanceof RuntimeException ? (RuntimeException) e : new RuntimeException(e);
             }
         }
-
-
     }
 
     private boolean isValid(SQSrequestDto dto) {
