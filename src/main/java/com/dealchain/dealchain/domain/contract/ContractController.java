@@ -641,35 +641,5 @@ public class ContractController {
         }
     }
 
-
-
-    /**
-     * ID로 계약서를 삭제합니다. (DB와 S3에서 모두 삭제)
-     *
-     * DELETE /api/contracts/{id}
-     */
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> deleteContract(@PathVariable("id") Long id) {
-        try {
-            contractService.deleteContract(id);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "계약서가 삭제되었습니다.");
-            response.put("contractId", id);
-
-            return ResponseEntity.ok(response);
-        } catch (IllegalArgumentException e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(response);
-        } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "계약서 삭제 중 오류가 발생했습니다: " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
-        }
-    }
 }
 

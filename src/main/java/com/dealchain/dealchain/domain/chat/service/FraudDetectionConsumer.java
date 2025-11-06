@@ -7,6 +7,7 @@ import com.dealchain.dealchain.domain.chat.dto.SQSrequestDto;
 import com.dealchain.dealchain.domain.chat.entity.ChatRoom;
 import com.dealchain.dealchain.domain.chat.repository.ChatRoomRepository;
 import com.dealchain.dealchain.domain.contract.service.ContractService;
+import com.dealchain.dealchain.domain.contract.service.NotificationService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.awspring.cloud.sqs.annotation.SqsListener;
 import lombok.RequiredArgsConstructor;
@@ -33,7 +34,7 @@ public class FraudDetectionConsumer {
     private final ChatRoomRepository chatRoomRepository;
     private final ChatPaser chatPaser;
     private final SageMakerService sageMakerService;
-
+    private final NotificationService notificationService;
     @Value("${MESSAGE_COUNT}")
     private int batchSize;
 
@@ -118,7 +119,7 @@ public class FraudDetectionConsumer {
                     log.warn("ChatRoom에서 seller/buyer ID를 찾을 수 없습니다. roomId={}, seller={}, buyer={}", roomId, seller, buyer);
                     continue;
                 }
-                contractService.sendNotification(buyer, seller, roomId, "위험! 계약서 작성을 권고드립니다.", "WARNING_FRAUD", null);
+                notificationService.sendNotification(buyer, seller, roomId, "위험! 계약서 작성을 권고드립니다.", "WARNING_FRAUD", null);
             } catch (Exception e) {
                 log.error("AI 호출/알림 처리 중 오류. RoomId: {}", roomId, e);
                 throw e instanceof RuntimeException ? (RuntimeException) e : new RuntimeException(e);
