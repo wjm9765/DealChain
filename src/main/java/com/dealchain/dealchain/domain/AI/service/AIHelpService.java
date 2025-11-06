@@ -39,7 +39,7 @@ public class AIHelpService {
     @PostConstruct//시스템 시작할 때 한번 시작
     public void loadSystemPrompt() throws Exception {
         if (systemPromptResource == null || !systemPromptResource.exists()) {
-            // [보안] NPE 방어 및 명확한 오류 메시지
+
             log.error("오류: AI 도움말 시스템 프롬프트 파일을 찾을 수 없습니다. (경로: {})", "src/main/resources/prompt/claude-contract-help-system-prompt.txt");
             throw new IllegalStateException("System prompt resource not found: claude-contract-help-system-prompt.txt");
         }
@@ -87,7 +87,6 @@ public class AIHelpService {
         String responseBody = response.body().asUtf8String();
         JSONObject responseJson = new JSONObject(responseBody);
 
-        // [수정] 3. AI가 생성한 'JSON' 문자열 반환
         return responseJson.getJSONArray("content")
                 .getJSONObject(0)
                 .getString("text");
