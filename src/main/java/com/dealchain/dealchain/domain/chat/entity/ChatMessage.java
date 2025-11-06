@@ -28,6 +28,9 @@ public class ChatMessage {
     private Long senderId;
 
 
+    //받는 사람
+    @Column(name ="receiver_id",nullable = false)
+    private Long receiverId;
     // text 역할
     @Column(columnDefinition = "TEXT")
     private String content;
