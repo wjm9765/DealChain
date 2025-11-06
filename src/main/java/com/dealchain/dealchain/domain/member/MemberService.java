@@ -16,6 +16,7 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.security.SecureRandom;
 import java.util.Map;
 import java.util.Optional;
 
@@ -23,6 +24,7 @@ import java.util.Optional;
 @Transactional(transactionManager = "memberTransactionManager")
 public class MemberService {
     private static final Logger log = LoggerFactory.getLogger(MemberService.class);
+    private static final SecureRandom secureRandom = new SecureRandom();
     
     private final MemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
@@ -37,6 +39,30 @@ public class MemberService {
         this.passwordEncoder = passwordEncoder;
         this.s3UploadService = s3UploadService;
         this.restTemplate = new RestTemplate();
+    }
+
+    // 랜덤한 긴 숫자 생성 메서드 (18~19자리)
+    private Long generateRandomMemberId() {
+        // 10^18 ~ 9*10^18 범위의 랜덤 숫자 생성 (18~19자리)
+        long min = 1_000_000_000_000_000_000L; // 10^18
+        long max = 9_223_372_036_854_775_806L; // Long.MAX_VALUE - 1
+        
+        Long randomId;
+        int attempts = 0;
+        int maxAttempts = 100; // 무한 루프 방지
+        
+        do {
+            // SecureRandom으로 랜덤 숫자 생성
+            long range = max - min + 1;
+            randomId = min + (long)(secureRandom.nextDouble() * range);
+            attempts++;
+            
+            if (attempts >= maxAttempts) {
+                throw new RuntimeException("memberId 생성에 실패했습니다. 중복이 너무 많습니다.");
+            }
+        } while (memberRepository.existsById(randomId));
+        
+        return randomId;
     }
 
     // 회원가입 - id, password, token, signatureImage 받음
@@ -103,8 +129,12 @@ public class MemberService {
                 signatureUrl = s3UploadService.upload(signatureFile, "signatures");
             }
 
+            // 랜덤 memberId 생성
+            Long randomMemberId = generateRandomMemberId();
+
             // id, password, name, ci, signatureImage 저장
             Member member = new Member(id, encodedPassword, name, ci, signatureUrl);
+            member.setMemberId(randomMemberId);  // 랜덤 ID 설정
             return memberRepository.save(member);
         } catch (IllegalArgumentException e) {
             throw e;
