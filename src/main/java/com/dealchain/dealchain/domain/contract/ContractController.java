@@ -298,51 +298,6 @@ public class ContractController {
                     .body(ContractResponseDto.builder().isSuccess(false).data("서버 내부 오류가 발생했습니다.").build());
         }
     }
-//
-//    /**
-//     * PDF 파일을 업로드하여 S3에 저장하고 경로를 RDS에 저장합니다.
-//     *
-//     * POST /api/contracts/upload
-//     */
-//    @PostMapping("/upload")
-//    public ResponseEntity<Map<String, Object>> uploadContract(
-//            @RequestParam("pdf") MultipartFile pdfFile,
-//            @RequestParam(value = "sellerId", required = false) Long sellerId,
-//            @RequestParam(value = "buyerId", required = false) Long buyerId,
-//            @RequestParam(value = "roomId", required = false) String roomId) {
-//        try {
-//            if (pdfFile == null || pdfFile.isEmpty()) {
-//                Map<String, Object> response = new HashMap<>();
-//                response.put("success", false);
-//                response.put("message", "PDF 파일이 필요합니다.");
-//                return ResponseEntity.badRequest().body(response);
-//            }
-//
-//            Contract contract = contractService.uploadAndSaveContract(pdfFile, sellerId, buyerId, roomId);
-//
-//            Map<String, Object> response = new HashMap<>();
-//            response.put("success", true);
-//            response.put("message", "계약서가 업로드되었습니다.");
-//            response.put("contractId", contract.getId());
-//            response.put("filePath", contract.getFilePath());
-//            response.put("sellerId", contract.getSellerId());
-//            response.put("buyerId", contract.getBuyerId());
-//            response.put("roomId", contract.getRoomId());
-//            response.put("encryptedHash", contract.getEncryptedHash());
-//
-//            return ResponseEntity.ok(response);
-//        } catch (IllegalArgumentException e) {
-//            Map<String, Object> response = new HashMap<>();
-//            response.put("success", false);
-//            response.put("message", e.getMessage());
-//            return ResponseEntity.badRequest().body(response);
-//        } catch (Exception e) {
-//            Map<String, Object> response = new HashMap<>();
-//            response.put("success", false);
-//            response.put("message", "계약서 업로드 중 오류가 발생했습니다: " + e.getMessage());
-//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
-//        }
-//    }
 
     @GetMapping("/contractLists")
     public ResponseEntity<?> getContractLists( // 반환 타입을 '?' (와일드카드)로 변경

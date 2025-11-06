@@ -1,6 +1,8 @@
 package com.dealchain.dealchain.domain.member;
 
 import com.dealchain.dealchain.domain.security.S3UploadService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpMethod;
@@ -20,6 +22,8 @@ import java.util.Optional;
 @Service
 @Transactional(transactionManager = "memberTransactionManager")
 public class MemberService {
+    private static final Logger log = LoggerFactory.getLogger(MemberService.class);
+    
     private final MemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
     private final S3UploadService s3UploadService;
@@ -69,30 +73,25 @@ public class MemberService {
                 }
             } catch (HttpClientErrorException e) {
                 // 4xx 에러 (클라이언트 오류)
-                System.out.println("HTTP Client Error: " + e.getStatusCode());
-                System.out.println("Response Body: " + e.getResponseBodyAsString());
-                e.printStackTrace(); // 스택 트레이스 출력
+                log.warn("토큰 검증 실패 - HTTP 상태 코드: {}", e.getStatusCode());
                 if (e.getStatusCode().value() == 404) {
+                    log.warn("토큰이 존재하지 않거나 만료되었습니다.");
                     throw new IllegalArgumentException("유효하지 않거나 만료된 토큰입니다.");
                 }
-                throw new IllegalArgumentException("토큰 검증 중 오류가 발생했습니다: " + e.getMessage() + " - " + e.getResponseBodyAsString());
+                log.error("토큰 검증 중 클라이언트 오류 발생", e);
+                throw new IllegalArgumentException("토큰 검증 중 오류가 발생했습니다.");
             } catch (HttpServerErrorException e) {
                 // 5xx 에러 (서버 오류)
-                System.out.println("HTTP Server Error: " + e.getStatusCode());
-                System.out.println("Response Body: " + e.getResponseBodyAsString());
-                e.printStackTrace();
-                throw new RuntimeException("인증 서버 오류가 발생했습니다: " + e.getMessage(), e);
+                log.error("인증 서버 오류 발생 - HTTP 상태 코드: {}", e.getStatusCode(), e);
+                throw new RuntimeException("인증 서버 오류가 발생했습니다.");
             } catch (ResourceAccessException e) {
                 // 네트워크 오류
-                System.out.println("Resource Access Error: " + e.getMessage());
-                e.printStackTrace();
-                throw new RuntimeException("인증 서버에 연결할 수 없습니다: " + e.getMessage(), e);
+                log.error("인증 서버 연결 실패", e);
+                throw new RuntimeException("인증 서버에 연결할 수 없습니다.");
             } catch (Exception e) {
                 // 모든 예외를 로깅
-                System.out.println("Unexpected Exception: " + e.getClass().getName());
-                System.out.println("Exception Message: " + e.getMessage());
-                e.printStackTrace();
-                throw new RuntimeException("토큰 검증 중 예상치 못한 오류: " + e.getMessage(), e);
+                log.error("토큰 검증 중 예상치 못한 오류 발생: {}", e.getClass().getName(), e);
+                throw new RuntimeException("토큰 검증 중 오류가 발생했습니다.");
             }
 
             // 비밀번호 암호화
@@ -112,7 +111,8 @@ public class MemberService {
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {
-            throw new RuntimeException("회원가입 중 오류가 발생했습니다: " + e.getMessage(), e);
+            log.error("회원가입 중 예상치 못한 오류 발생", e);
+            throw new RuntimeException("회원가입 중 오류가 발생했습니다.");
         }
     }
 
@@ -123,18 +123,20 @@ public class MemberService {
         try {
             Optional<Member> memberOpt = memberRepository.findByIdString(id);
             
-            Member member = memberOpt.orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
+            // 보안을 위해 회원 존재 여부와 비밀번호 오류를 구분하지 않음
+            Member member = memberOpt.orElseThrow(() -> new IllegalArgumentException("아이디 또는 비밀번호가 일치하지 않습니다."));
 
             // 비밀번호 검증
             if (!passwordEncoder.matches(password, member.getPassword())) {
-                throw new IllegalArgumentException("비밀번호가 일치하지 않습니다.");
+                throw new IllegalArgumentException("아이디 또는 비밀번호가 일치하지 않습니다.");
             }
 
             return member;
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {
-            throw new RuntimeException("로그인 중 오류가 발생했습니다.", e);
+            log.error("로그인 중 예상치 못한 오류 발생", e);
+            throw new RuntimeException("로그인 중 오류가 발생했습니다.");
         }
     }
 
@@ -149,7 +151,8 @@ public class MemberService {
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {
-            throw new RuntimeException("회원 정보 조회 중 오류가 발생했습니다.", e);
+            log.error("회원 정보 조회 중 예상치 못한 오류 발생", e);
+            throw new RuntimeException("회원 정보 조회 중 오류가 발생했습니다.");
         }
     }
 }

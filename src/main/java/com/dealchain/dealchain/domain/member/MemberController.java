@@ -1,4 +1,4 @@
-// java
+
 package com.dealchain.dealchain.domain.member;
 
 import com.dealchain.dealchain.config.JwtUtil;
@@ -74,8 +74,6 @@ public class MemberController {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
             response.put("message", "회원가입 중 오류가 발생했습니다.");
-            // 로그에도 출력
-            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
@@ -93,7 +91,7 @@ public class MemberController {
             // HttpOnly Cookie 설정
             Cookie cookie = new Cookie("token", token);
             cookie.setHttpOnly(true);
-            cookie.setSecure(false);
+            cookie.setSecure(true);
             cookie.setPath("/");
             cookie.setMaxAge(86400);
 
@@ -141,10 +139,10 @@ public class MemberController {
             Map<String, Object> memberInfo = new HashMap<>();
             memberInfo.put("memberId", member.getMemberId());
             memberInfo.put("id", member.getId());
-            memberInfo.put("password", member.getPassword());
+            //memberInfo.put("password", member.getPassword());
             memberInfo.put("name", member.getName() != null ? member.getName() : "");
-            memberInfo.put("ci", member.getCi() != null ? member.getCi() : "");
-            memberInfo.put("signatureImage", member.getSignatureImage() != null ? member.getSignatureImage() : "");
+            //memberInfo.put("ci", member.getCi() != null ? member.getCi() : "");
+            //memberInfo.put("signatureImage", member.getSignatureImage() != null ? member.getSignatureImage() : "");
 
             response.put("member", memberInfo);
 

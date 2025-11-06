@@ -42,8 +42,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-                )
-                //.anonymous(anonymous -> anonymous.disable())
+                )                //.anonymous(anonymous -> anonymous.disable())
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((request, response, authException) -> {
                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
@@ -74,7 +73,6 @@ public class SecurityConfig {
                         
                         // 마지막에 anyRequest
                         .anyRequest().authenticated()
-                        //.anyRequest().permitAll()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
