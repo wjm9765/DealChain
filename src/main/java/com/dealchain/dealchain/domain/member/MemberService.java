@@ -1,93 +1,102 @@
 package com.dealchain.dealchain.domain.member;
 
-import com.dealchain.dealchain.domain.api.VerifyService;
-import com.dealchain.dealchain.domain.api.dto.VerifyResponseDto;
 import com.dealchain.dealchain.domain.security.S3UploadService;
-import com.dealchain.dealchain.util.EncryptionUtil;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Map;
 import java.util.Optional;
 
 @Service
 @Transactional(transactionManager = "memberTransactionManager")
 public class MemberService {
     private final MemberRepository memberRepository;
-    private final EncryptionUtil encryptionUtil;
+    private final PasswordEncoder passwordEncoder;
     private final S3UploadService s3UploadService;
-    private final VerifyService verifyService;
+    private final RestTemplate restTemplate;
+    
+    @Value("${verify.api.url}")
+    private String verifyApiUrl;
 
-    public MemberService(MemberRepository memberRepository, EncryptionUtil encryptionUtil, S3UploadService s3UploadService, VerifyService verifyService) {
+    public MemberService(MemberRepository memberRepository, PasswordEncoder passwordEncoder, S3UploadService s3UploadService) {
         this.memberRepository = memberRepository;
-        this.encryptionUtil = encryptionUtil;
+        this.passwordEncoder = passwordEncoder;
         this.s3UploadService = s3UploadService;
-        this.verifyService = verifyService;
+        this.restTemplate = new RestTemplate();
     }
 
-    // 회원가입 (서명 이미지 포함)
-    public Member register(String name, String residentNumber, String phoneNumber, String signatureImage) {
+    // 회원가입 - id, password, token, signatureImage 받음
+    public Member register(String id, String password, String token, MultipartFile signatureFile) {
         try {
-            // 본인 인증 수행
-            VerifyResponseDto verifyResponse;
-            try {
-                verifyResponse = verifyService.verify(name, phoneNumber, residentNumber);
-            } catch (RuntimeException e) {
-                throw new IllegalArgumentException("인증 실패: 유저 정보를 찾을 수 없습니다", e);
+            // id 중복 체크
+            if (memberRepository.existsByIdString(id)) {
+                throw new IllegalArgumentException("이미 사용 중인 아이디입니다.");
             }
+
+            String name = null;
+            String ci = null;
             
-            if (verifyResponse == null || !verifyResponse.getSuccess()) {
-                String errorMessage = verifyResponse != null && verifyResponse.getMessage() != null 
-                    ? verifyResponse.getMessage() 
-                    : "인증 실패: 유저 정보를 찾을 수 없습니다";
-                throw new IllegalArgumentException(errorMessage);
-            }
-
-            // 이름/주민번호/전화번호 암호화
-            String encryptedName = encryptionUtil.encryptString(name);
-            String encryptedResidentNumber = encryptionUtil.encryptString(residentNumber);
-            String encryptedPhoneNumber = encryptionUtil.encryptString(phoneNumber);
-
-            // 암호화된 주민번호로 중복 체크
-            if (memberRepository.existsByResidentNumber(encryptedResidentNumber)) {
-                throw new IllegalArgumentException("이미 가입된 주민번호입니다.");
-            }
-
-            Member member = new Member(encryptedName, encryptedResidentNumber, encryptedPhoneNumber, signatureImage);
-            return memberRepository.save(member);
-        } catch (IllegalArgumentException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new RuntimeException("회원가입 중 오류가 발생했습니다.", e);
-        }
-    }
-
-    //회원가입 - 서명이미지를 s3에 저장
-    public Member register(String name, String residentNumber, String phoneNumber, MultipartFile signatureFile) {
-        try {
-            // 본인 인증 수행
-            VerifyResponseDto verifyResponse;
             try {
-                verifyResponse = verifyService.verify(name, phoneNumber, residentNumber);
-            } catch (RuntimeException e) {
-                throw new IllegalArgumentException("인증 실패: 유저 정보를 찾을 수 없습니다", e);
-            }
-            
-            if (verifyResponse == null || !verifyResponse.getSuccess()) {
-                String errorMessage = verifyResponse != null && verifyResponse.getMessage() != null 
-                    ? verifyResponse.getMessage() 
-                    : "인증 실패: 유저 정보를 찾을 수 없습니다";
-                throw new IllegalArgumentException(errorMessage);
+                String tokenUrl = verifyApiUrl + "/" + token;
+                ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                    tokenUrl,
+                    HttpMethod.GET,
+                    null,
+                    new ParameterizedTypeReference<Map<String, Object>>() {}
+                );
+                
+                Map<String, Object> responseBody = response.getBody();
+
+                if (responseBody == null) {
+                    throw new IllegalArgumentException("유효하지 않거나 만료된 토큰입니다.");
+                }
+                
+                name = (String) responseBody.get("name");
+                ci = (String) responseBody.get("ci");
+                
+                if (name == null || ci == null) {
+                    throw new IllegalArgumentException("토큰에서 이름 또는 CI 정보를 가져올 수 없습니다.");
+                }
+            } catch (HttpClientErrorException e) {
+                // 4xx 에러 (클라이언트 오류)
+                System.out.println("HTTP Client Error: " + e.getStatusCode());
+                System.out.println("Response Body: " + e.getResponseBodyAsString());
+                e.printStackTrace(); // 스택 트레이스 출력
+                if (e.getStatusCode().value() == 404) {
+                    throw new IllegalArgumentException("유효하지 않거나 만료된 토큰입니다.");
+                }
+                throw new IllegalArgumentException("토큰 검증 중 오류가 발생했습니다: " + e.getMessage() + " - " + e.getResponseBodyAsString());
+            } catch (HttpServerErrorException e) {
+                // 5xx 에러 (서버 오류)
+                System.out.println("HTTP Server Error: " + e.getStatusCode());
+                System.out.println("Response Body: " + e.getResponseBodyAsString());
+                e.printStackTrace();
+                throw new RuntimeException("인증 서버 오류가 발생했습니다: " + e.getMessage(), e);
+            } catch (ResourceAccessException e) {
+                // 네트워크 오류
+                System.out.println("Resource Access Error: " + e.getMessage());
+                e.printStackTrace();
+                throw new RuntimeException("인증 서버에 연결할 수 없습니다: " + e.getMessage(), e);
+            } catch (Exception e) {
+                // 모든 예외를 로깅
+                System.out.println("Unexpected Exception: " + e.getClass().getName());
+                System.out.println("Exception Message: " + e.getMessage());
+                e.printStackTrace();
+                throw new RuntimeException("토큰 검증 중 예상치 못한 오류: " + e.getMessage(), e);
             }
 
-            String encryptedName = encryptionUtil.encryptString(name);
-            String encryptedResidentNumber = encryptionUtil.encryptString(residentNumber);
-            String encryptedPhoneNumber = encryptionUtil.encryptString(phoneNumber);
-
-            // 주민번호 암호화 및 중복 체크
-            if (memberRepository.existsByResidentNumber(encryptedResidentNumber)) {
-                throw new IllegalArgumentException("이미 가입된 주민번호입니다.");
-            }
+            // 비밀번호 암호화
+            String encodedPassword = passwordEncoder.encode(password);
 
             // signatureFile이 제공되면 유효성 검사 및 S3 업로드
             String signatureUrl = null;
@@ -95,39 +104,33 @@ public class MemberService {
                 signatureUrl = s3UploadService.upload(signatureFile, "signatures");
             }
 
-            Member member = new Member(encryptedName, encryptedResidentNumber, encryptedPhoneNumber, signatureUrl);
+            // id, password, name, ci, signatureImage 저장
+            Member member = new Member(id, encodedPassword, name, ci, signatureUrl);
             return memberRepository.save(member);
         } catch (IllegalArgumentException e) {
             throw e;
+        } catch (RuntimeException e) {
+            throw e;
         } catch (Exception e) {
-            throw new RuntimeException("회원가입 중 오류가 발생했습니다.", e);
+            throw new RuntimeException("회원가입 중 오류가 발생했습니다: " + e.getMessage(), e);
         }
     }
 
 
-    // 로그인 (이름, 주민번호, 전화번호로 회원 찾기)
+    // 로그인 (id, password로 회원 찾기)
     @Transactional(readOnly = true, transactionManager = "memberTransactionManager")
-    public Member login(String name, String residentNumber, String phoneNumber) {
+    public Member login(String id, String password) {
         try {
-            // 암호화된 값으로 비교 (DB에 암호화된 상태로 저장됨)
-            String encryptedName = encryptionUtil.encryptString(name);
-            String encryptedResidentNumber = encryptionUtil.encryptString(residentNumber);
-            String encryptedPhoneNumber = encryptionUtil.encryptString(phoneNumber);
-
-            Optional<Member> memberOpt = memberRepository
-                    .findByNameAndResidentNumberAndPhoneNumber(encryptedName, encryptedResidentNumber, encryptedPhoneNumber);
-
+            Optional<Member> memberOpt = memberRepository.findByIdString(id);
+            
             Member member = memberOpt.orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
 
-            // 반환용 복호화된 사본 생성 (원본은 암호화 상태 유지)
-            Member decrypted = new Member(
-                    encryptionUtil.decryptString(member.getName()),
-                    encryptionUtil.decryptString(member.getResidentNumber()),
-                    encryptionUtil.decryptString(member.getPhoneNumber()),
-                    member.getSignatureImage()
-            );
-            decrypted.setId(member.getId());
-            return decrypted;
+            // 비밀번호 검증
+            if (!passwordEncoder.matches(password, member.getPassword())) {
+                throw new IllegalArgumentException("비밀번호가 일치하지 않습니다.");
+            }
+
+            return member;
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {
@@ -135,23 +138,14 @@ public class MemberService {
         }
     }
 
-    // 회원 정보 조회 (이름/주민번호/전화번호 복호화하여 반환)
+    // 회원 정보 조회
     @Transactional(readOnly = true, transactionManager = "memberTransactionManager")
-    public Member findById(Long id) {
+    public Member findById(Long memberId) {
         try {
-            Member member = memberRepository.findById(id)
+            Member member = memberRepository.findById(memberId)
                     .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
 
-            // 이름/주민번호/전화번호 복호화하여 새로운 Member 객체 생성 (원본은 수정하지 않음)
-            Member decryptedMember = new Member(
-                    encryptionUtil.decryptString(member.getName()),
-                    encryptionUtil.decryptString(member.getResidentNumber()),
-                    encryptionUtil.decryptString(member.getPhoneNumber()),
-                    member.getSignatureImage()
-            );
-            decryptedMember.setId(member.getId());
-
-            return decryptedMember;
+            return member;
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {

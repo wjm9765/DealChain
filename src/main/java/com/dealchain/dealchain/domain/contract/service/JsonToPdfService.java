@@ -62,32 +62,6 @@ public class JsonToPdfService {
         }
     }
 
-
-//    //나중에 삭제해야됨,테스트용 함수
-//    private void savePdfToDesktopForTesting(byte[] pdfBytes) {
-//        try {
-//            // [보안] 'resources'가 아닌 '사용자 홈 디렉토리' (예: C:\Users\YourUser 또는 /home/YourUser)
-//            String userHome = System.getProperty("user.home");
-//            String desktopPath = userHome + "/Desktop"; // 바탕화면 경로
-//            String filePath = desktopPath + "/test_contract.pdf";
-//
-//            log.warn("--- [테스트 전용 보안 경고] ---");
-//            log.warn("'java 시큐어 코딩 가이드' (84p) 위반: 민감한 PDF를 서버 디스크에 저장합니다.");
-//            log.warn("저장 위치: {}", filePath);
-//            log.warn("프로덕션 배포 전 이 'savePdfToDesktopForTesting' 호출 코드를 반드시 제거하십시오.");
-//            log.warn("------------------------------");
-//
-//            // '디스크'에 파일 쓰기 (C++의 fwrite와 유사)
-//            try (FileOutputStream fos = new FileOutputStream(filePath)) {
-//                fos.write(pdfBytes);
-//            }
-//
-//        } catch (Exception e) {
-//            // 테스트용 저장이 실패해도, 메인 로직(S3 업로드)은 중단되면 안 됨.
-//            log.error("테스트용 PDF 파일 저장 실패 (메인 로직 계속 진행): {}", e.getMessage());
-//        }
-//    }
-
     /**
      * JSON과 2개의 S3 서명 키로 PDF를 생성
      *
@@ -106,8 +80,7 @@ public class JsonToPdfService {
             throw new IllegalArgumentException("AI가 생성한 계약서 데이터가 너무 큽니다.");
         }
 
-
-        // --- 1. [보안] XSS 살균 (JSON -> 순수 텍스트 Map) ---
+        //xss 검증
         Map<String, Object> contractMap = sanitizeJsonMap(aiContractJson);
 
         try (PDDocument document = new PDDocument();
@@ -121,56 +94,72 @@ public class JsonToPdfService {
                 drawText(stream, "자동 생성 계약서 (초안)", (PAGE_WIDTH - 180) / 2, MARGIN_TOP, 20);
 
                 float currentY = MARGIN_TOP - 60;
-                
+
                 // AI JSON 데이터 추출 (Null-Safe)
                 Map<String, Object> parties = getMap(contractMap, "parties");
-                Map<String, Object> item = getMap(contractMap, "item");
+                Map<String, Object> item = getMap(contractMap, "item_details");
                 Map<String, Object> payment = getMap(contractMap, "payment");
-                Map<String, Object> deal = getMap(contractMap, "how to deal");
-                String specialTerms = getString(contractMap, "specialTerms");
+                Map<String, Object> deal = getMap(contractMap, "delivery");
+                Map<String, Object> otherTerms = getMap(contractMap, "other_terms");
+                Map<String, Object> cancellationPolicy = getMap(contractMap, "cancellation_policy"); //  cancellation_policy 추출
+                Map<String, Object> refundPolicy = getMap(contractMap, "refund_policy"); // refund_policy 추출
+                Map<String, Object> disputeResolution = getMap(contractMap, "dispute_resolution"); // dispute_resolution 추출
+
                 currentY = drawSection(stream, "1. 거래 당사자", currentY);
-                currentY = drawTextLine(stream, " - 판매자 (갑): " + getString(parties, "sellerName"), currentY);
-                currentY = drawTextLine(stream, " - 구매자 (을): " + getString(parties, "buyerName"), currentY);
+                currentY = drawTextLine(stream, " - 판매자 (갑): " + getString(getMap(parties, "seller"), "name"), currentY);
+                currentY = drawTextLine(stream, " - 구매자 (을): " + getString(getMap(parties, "buyer"), "name"), currentY);
 
                 currentY = drawSection(stream, "2. 거래 물품", currentY - 10);
                 currentY = drawTextLine(stream, " - 물품명: " + getString(item, "name"), currentY);
-                currentY = drawTextLine(stream, " - 물품상태: " + getString(item, "condition"), currentY);
+                currentY = drawTextLine(stream, " - 물품상태: " + getString(item, "condition_and_info"), currentY);
 
                 currentY = drawSection(stream, "3. 거래 대금", currentY - 10);
                 currentY = drawTextLine(stream, " - 가격: " + getString(payment, "price") + " 원", currentY);
-                currentY = drawTextLine(stream, " - 지급방식: " + getString(payment, "method"), currentY);
+                currentY = drawTextLine(stream, " - 지급방식: " + getString(payment, "payment_method"), currentY);
 
                 currentY = drawSection(stream, "4. 거래 방법", currentY - 10);
                 currentY = drawTextLine(stream, " - 방식: " + getString(deal, "method"), currentY);
-                currentY = drawTextLine(stream, " - 시간: " + getString(deal, "dateTime"), currentY);
+                currentY = drawTextLine(stream, " - 시간: " + getString(deal, "schedule"), currentY);
                 currentY = drawTextLine(stream, " - 장소: " + getString(deal, "location"), currentY);
 
-                currentY = drawSection(stream, "5. 특약 사항", currentY - 10);
-                currentY = drawTextLine(stream, " - " + specialTerms, currentY);
+                //  5. 청약 철회 (cancellation_policy) 섹션 추가
+                currentY = drawSection(stream, "5. 청약 철회 및 계약 해제", currentY - 10);
+                currentY = drawTextLine(stream, " - " + getString(cancellationPolicy, "details"), currentY);
+
+                //6. 환불 정책 (refund_policy) 섹션 추가
+                currentY = drawSection(stream, "6. 교환·반품·보증 및 환불", currentY - 10);
+                currentY = drawTextLine(stream, " - " + getString(refundPolicy, "details"), currentY);
+
+                // 7. 분쟁 해결 (dispute_resolution) 섹션 추가
+                currentY = drawSection(stream, "7. 소비자 피해보상 및 불만 처리", currentY - 10);
+                currentY = drawTextLine(stream, " - " + getString(disputeResolution, "details"), currentY);
+
+                // 섹션 번호 변경 "5." -> "8."
+                currentY = drawSection(stream, "8. 기타 거래 조건", currentY - 10);
+                String techSpecs = getString(otherTerms, "technical_specs");
+                String generalTerms = getString(otherTerms, "general_terms");
+                currentY = drawTextLine(stream, " - 기술 사양: " + techSpecs, currentY);
+                currentY = drawTextLine(stream, " - 일반 조건: " + generalTerms, currentY);
+
 
                 // 판매자 서명 (왼쪽 하단)
                 float sellerSignY = 150;
-                String sellerText = "판매자 (갑): " + getString(parties, "sellerName");
+                String sellerText = "판매자 (갑): " + getString(getMap(parties, "seller"), "name");
                 drawText(stream, sellerText, MARGIN_X, sellerSignY, 12);
-                drawText(stream, "--------------------", MARGIN_X, sellerSignY + 5, 12);
+                drawText(stream, "----------------", MARGIN_X, sellerSignY + 7, 12);
                 drawImageFromS3(document, stream, sellerSignatureKey, MARGIN_X, sellerSignY + 20);
 
                 // 구매자 서명 (오른쪽 하단)
                 float buyerSignX = MARGIN_X + 280;
                 float buyerSignY = 150;
-                String buyerText = "구매자 (을): " + getString(parties, "buyerName");
+                String buyerText = "구매자 (을): " + getString(getMap(parties, "buyer"), "name");
                 drawText(stream, buyerText, buyerSignX, buyerSignY, 12);
-                drawText(stream, "--------------------", buyerSignX, buyerSignY + 5, 12);
+                drawText(stream, "----------------", buyerSignX, buyerSignY + 7, 12);
                 drawImageFromS3(document, stream, buyerSignatureKey, buyerSignX, buyerSignY + 20);
 
             }
 
             document.save(out);
-
-            //나중에 삭제해야됨
-            //byte[] pdfBytes = out.toByteArray();
-            //savePdfToDesktopForTesting(pdfBytes);
-            //
             return out.toByteArray();
         }
     }
@@ -186,7 +175,7 @@ public class JsonToPdfService {
             // S3UploadService를 통해 신뢰할 수 있는 버킷에서 이미지 다운로드
             byte[] imageBytes = s3UploadService.downloadFile(s3Key);
             PDImageXObject pdImage = PDImageXObject.createFromByteArray(document, imageBytes, s3Key);
-            stream.drawImage(pdImage, x, y, 60, 30);
+            stream.drawImage(pdImage, x, y, 95, 50);
 
         } catch (Exception e) {
             // 서명 이미지 실패해도 PDF 생성 계속 (DoS 방지)
@@ -215,20 +204,6 @@ public class JsonToPdfService {
         }
     }
 
-
-//    //map 데이터 타입 강제 변환 예외처리
-//    private void sanitizeMapRecursively(Map<String, Object> map) {
-//        for (Map.Entry<String, Object> entry : map.entrySet()) {
-//            Object value = entry.getValue();
-//            if (value instanceof String) {
-//                entry.setValue(xssSanitizer.sanitizeToPlainText((String) value));
-//            } else if (value instanceof Map) {
-//                sanitizeMapRecursively((Map<String, Object>) value);
-//            }
-//        }
-//    }
-
-    // --- PDF 텍스트 그리기를 위한 NPE-Safe 헬퍼 메서드들 ---
 
     /**
      * PDF에 텍스트를 그리기
@@ -271,7 +246,11 @@ public class JsonToPdfService {
     private String getString(Map<String, Object> map, String key) {
         if (map == null) return "(정보 없음)";
         Object val = map.get(key);
-        return (val == null) ? "(정보 없음)" : String.valueOf(val);
+        // [수정] AI가 "null"을 문자열이 아닌 진짜 null 값으로 반환하는 경우를 대비
+        if (val == null || "null".equals(String.valueOf(val))) {
+            return "(정보 없음)";
+        }
+        return String.valueOf(val);
     }
 
     /**
@@ -279,6 +258,7 @@ public class JsonToPdfService {
      * Map이 아니거나 null이면 빈 Map 반환
      */
     private Map<String, Object> getMap(Map<String, Object> map, String key) {
+        if (map == null) return Collections.emptyMap(); // [수정] 상위 맵이 null일 경우 NPE 방지
         Object val = map.get(key);
         if (val instanceof Map) {
             @SuppressWarnings("unchecked")

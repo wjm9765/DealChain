@@ -36,7 +36,7 @@ public class ContractData {
 
     //저장할 때 암호화해서 저장
     @Lob // Large Object (TEXT 또는 CLOB 타입으로 매핑)
-    @Column(name = "contract_json_data", nullable = false)
+    @Column(name = "contract_json_data", columnDefinition = "LONGTEXT",nullable = false)
     private String contractJsonData;
 
     @Builder

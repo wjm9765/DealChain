@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
 @Getter
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class ContractDefaultReqeustDto {
-    private Long sellerId;//판매자
-    private Long buyerId;//구매자
+    private String seller_name;//판매자
+    private String buyer_name;//구매자
     private Product product;//상품 제목, 글, 가격 등
 }

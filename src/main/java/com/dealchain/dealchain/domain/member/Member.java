@@ -14,30 +14,35 @@ public class Member {
     
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @Column(name = "member_id")
+    private Long memberId;
+    
+    @Column(nullable = false, unique = true)
+    private String id;
     
     @Column(nullable = false)
+    private String password;
+    
+    @Column(name = "name")
     private String name;
     
-    @Column(name = "resident_number", nullable = false, unique = true)
-    private String residentNumber;
-    
-    @Column(name = "phone_number", nullable = false)
-    private String phoneNumber;
+    @Column(name = "ci")
+    private String ci;
     
     @Column(name = "signature_image", columnDefinition = "TEXT")
     private String signatureImage;
     
-    public Member(String name, String residentNumber, String phoneNumber) {
-        this.name = name;
-        this.residentNumber = residentNumber;
-        this.phoneNumber = phoneNumber;
+    public Member(String id, String password, String signatureImage) {
+        this.id = id;
+        this.password = password;
+        this.signatureImage = signatureImage;
     }
     
-    public Member(String name, String residentNumber, String phoneNumber, String signatureImage) {
+    public Member(String id, String password, String name, String ci, String signatureImage) {
+        this.id = id;
+        this.password = password;
         this.name = name;
-        this.residentNumber = residentNumber;
-        this.phoneNumber = phoneNumber;
+        this.ci = ci;
         this.signatureImage = signatureImage;
     }
 }
