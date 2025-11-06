@@ -26,11 +26,31 @@ public class ContractHelpJsonConverter {
             // parties 변환
             if (json.has("parties") && !json.isNull("parties")) {
                 JSONObject partiesJson = json.getJSONObject("parties");
-                ContractHelpResponseDto.Parties parties = ContractHelpResponseDto.Parties.builder()
-                        .seller(partiesJson.optString("seller", null))
-                        .buyer(partiesJson.optString("buyer", null))
-                        .build();
-                builder.parties(parties);
+                ContractHelpResponseDto.Parties.PartiesBuilder partiesBuilder = ContractHelpResponseDto.Parties.builder();
+                
+                // buyer 변환
+                if (partiesJson.has("buyer") && !partiesJson.isNull("buyer")) {
+                    JSONObject buyerJson = partiesJson.getJSONObject("buyer");
+                    ContractHelpResponseDto.Parties.PartyInfo buyer = ContractHelpResponseDto.Parties.PartyInfo.builder()
+                            .address(buyerJson.optString("address", null))
+                            .name(buyerJson.optString("name", null))
+                            .phone(buyerJson.optString("phone", null))
+                            .build();
+                    partiesBuilder.buyer(buyer);
+                }
+                
+                // seller 변환
+                if (partiesJson.has("seller") && !partiesJson.isNull("seller")) {
+                    JSONObject sellerJson = partiesJson.getJSONObject("seller");
+                    ContractHelpResponseDto.Parties.PartyInfo seller = ContractHelpResponseDto.Parties.PartyInfo.builder()
+                            .address(sellerJson.optString("address", null))
+                            .name(sellerJson.optString("name", null))
+                            .phone(sellerJson.optString("phone", null))
+                            .build();
+                    partiesBuilder.seller(seller);
+                }
+                
+                builder.parties(partiesBuilder.build());
             }
 
             // item_details 변환
@@ -63,6 +83,15 @@ public class ContractHelpJsonConverter {
                         .schedule(deliveryJson.optString("schedule", null))
                         .build();
                 builder.delivery(delivery);
+            }
+
+            // escrow 변환
+            if (json.has("escrow") && !json.isNull("escrow")) {
+                JSONObject escrowJson = json.getJSONObject("escrow");
+                ContractHelpResponseDto.Escrow escrow = ContractHelpResponseDto.Escrow.builder()
+                        .details(escrowJson.optString("details", null))
+                        .build();
+                builder.escrow(escrow);
             }
 
             // cancellation_policy 변환
@@ -110,8 +139,19 @@ public class ContractHelpJsonConverter {
                         .payment(reasonJson.optString("payment", null))
                         .delivery(reasonJson.optString("delivery", null))
                         .cancellation_policy(reasonJson.optString("cancellation_policy", null))
+                        .contract_date(reasonJson.optString("contract_date", null))
+                        .dispute_resolution(reasonJson.optString("dispute_resolution", null))
+                        .escrow(reasonJson.optString("escrow", null))
+                        .other_terms(reasonJson.optString("other_terms", null))
+                        .parties(reasonJson.optString("parties", null))
+                        .refund_policy(reasonJson.optString("refund_policy", null))
                         .build();
                 builder.reason(reason);
+            }
+
+            // final_summary 변환
+            if (json.has("final_summary") && !json.isNull("final_summary")) {
+                builder.final_summary(json.optString("final_summary", null));
             }
 
             return builder.build();
