@@ -19,4 +19,7 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     // id(String) 중복 체크용
     @Query("SELECT CASE WHEN COUNT(m) > 0 THEN true ELSE false END FROM Member m WHERE m.id = :id")
     boolean existsByIdString(@Param("id") String id);
+    // ci 중복 체크용
+    @Query("SELECT CASE WHEN COUNT(m) > 0 THEN true ELSE false END FROM Member m WHERE m.ci = :ci")
+    boolean existsByCi(@Param("ci") String ci);
 }

@@ -97,6 +97,11 @@ public class MemberService {
                 if (name == null || ci == null) {
                     throw new IllegalArgumentException("토큰에서 이름 또는 CI 정보를 가져올 수 없습니다.");
                 }
+                
+                // CI 중복 체크
+                if (memberRepository.existsByCi(ci)) {
+                    throw new IllegalArgumentException("이미 가입된 CI입니다.");
+                }
             } catch (HttpClientErrorException e) {
                 // 4xx 에러 (클라이언트 오류)
                 log.warn("토큰 검증 실패 - HTTP 상태 코드: {}", e.getStatusCode());

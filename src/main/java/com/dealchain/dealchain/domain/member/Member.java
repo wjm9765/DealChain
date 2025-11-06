@@ -25,7 +25,7 @@ public class Member {
     @Column(name = "name")
     private String name;
     
-    @Column(name = "ci")
+    @Column(name = "ci", unique = true)
     private String ci;
     
     @Column(name = "signature_image", columnDefinition = "TEXT")
