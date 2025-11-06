@@ -3,6 +3,9 @@ package com.dealchain.dealchain.domain.product;
 import com.dealchain.dealchain.domain.product.dto.ProductRegisterRequestDto;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -12,6 +15,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -122,7 +126,13 @@ public class ProductController {
             productInfo.put("title", product.getTitle());
             productInfo.put("description", product.getDescription() != null ? product.getDescription() : "");
             productInfo.put("memberId", product.getMemberId());
-            productInfo.put("productImage", product.getProductImage() != null ? product.getProductImage() : "");
+            // 이미지를 Base64로 인코딩하여 반환
+            if (product.getProductImage() != null && !product.getProductImage().isEmpty()) {
+                String base64Image = loadImageAsBase64(product.getProductImage());
+                productInfo.put("productImage", base64Image != null ? base64Image : "");
+            } else {
+                productInfo.put("productImage", "");
+            }
             
             response.put("product", productInfo);
             
@@ -149,7 +159,13 @@ public class ProductController {
                         productMap.put("productName", product.getProductName());
                         productMap.put("title", product.getTitle());
                         productMap.put("price", product.getPrice());
-                        productMap.put("productImage", product.getProductImage() != null ? product.getProductImage() : "");
+                        // 이미지를 Base64로 인코딩하여 반환
+                        if (product.getProductImage() != null && !product.getProductImage().isEmpty()) {
+                            String base64Image = loadImageAsBase64(product.getProductImage());
+                            productMap.put("productImage", base64Image != null ? base64Image : "");
+                        } else {
+                            productMap.put("productImage", "");
+                        }
                         return productMap;
                     })
                     .toList();
@@ -174,10 +190,29 @@ public class ProductController {
         try {
             List<Product> products = productService.findProductsByMemberId(memberId);
             
+            // description과 memberId를 제외한 상품 정보만 추출
+            List<Map<String, Object>> productList = products.stream()
+                    .map(product -> {
+                        Map<String, Object> productMap = new HashMap<>();
+                        productMap.put("id", product.getId());
+                        productMap.put("productName", product.getProductName());
+                        productMap.put("title", product.getTitle());
+                        productMap.put("price", product.getPrice());
+                        // 이미지를 Base64로 인코딩하여 반환
+                        if (product.getProductImage() != null && !product.getProductImage().isEmpty()) {
+                            String base64Image = loadImageAsBase64(product.getProductImage());
+                            productMap.put("productImage", base64Image != null ? base64Image : "");
+                        } else {
+                            productMap.put("productImage", "");
+                        }
+                        return productMap;
+                    })
+                    .toList();
+            
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("products", products);
-            response.put("count", products.size());
+            response.put("products", productList);
+            response.put("count", productList.size());
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {
@@ -185,6 +220,47 @@ public class ProductController {
             response.put("success", false);
             response.put("message", e.getMessage());
             return ResponseEntity.badRequest().body(response);
+        }
+    }
+    
+    // 상품 이미지 조회 API (이미지 파일 직접 반환)
+    @GetMapping("/{productId}/image")
+    public ResponseEntity<byte[]> getProductImage(@PathVariable("productId") Long productId) {
+        try {
+            Product product = productService.findById(productId);
+            
+            if (product == null || product.getProductImage() == null || product.getProductImage().isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            // 이미지 파일 경로
+            String imagePath = product.getProductImage();
+            Path filePath = Paths.get(imagePath);
+            
+            // 파일이 존재하는지 확인
+            if (!Files.exists(filePath)) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            // 파일 읽기
+            byte[] imageBytes = Files.readAllBytes(filePath);
+            
+            // Content-Type 결정
+            String contentType = getContentType(imagePath);
+            
+            // HTTP 헤더 설정
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.parseMediaType(contentType));
+            headers.setContentLength(imageBytes.length);
+            
+            return new ResponseEntity<>(imageBytes, headers, HttpStatus.OK);
+            
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
     
@@ -207,5 +283,48 @@ public class ProductController {
         Files.copy(image.getInputStream(), filePath);
         
         return uploadDir + "/" + filename;
+    }
+    
+    // 파일 확장자에 따라 Content-Type 결정
+    private String getContentType(String filePath) {
+        String lowerPath = filePath.toLowerCase();
+        if (lowerPath.endsWith(".jpg") || lowerPath.endsWith(".jpeg")) {
+            return "image/jpeg";
+        } else if (lowerPath.endsWith(".png")) {
+            return "image/png";
+        } else if (lowerPath.endsWith(".gif")) {
+            return "image/gif";
+        } else if (lowerPath.endsWith(".webp")) {
+            return "image/webp";
+        } else {
+            return "application/octet-stream";
+        }
+    }
+    
+    // 이미지 파일을 Base64로 인코딩하여 반환
+    private String loadImageAsBase64(String imagePath) {
+        try {
+            Path filePath = Paths.get(imagePath);
+            
+            // 파일이 존재하는지 확인
+            if (!Files.exists(filePath)) {
+                return null;
+            }
+            
+            // 파일 읽기
+            byte[] imageBytes = Files.readAllBytes(filePath);
+            
+            // Base64로 인코딩
+            String base64Image = Base64.getEncoder().encodeToString(imageBytes);
+            
+            // Content-Type에 따라 data URI 형식으로 반환
+            String contentType = getContentType(imagePath);
+            return "data:" + contentType + ";base64," + base64Image;
+            
+        } catch (IOException e) {
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 }
