@@ -54,8 +54,6 @@ public class SecurityConfig {
                         // permitAll 경로 먼저 명시 (더 구체적인 경로부터)
                         .requestMatchers("/api/members/register").permitAll()
                         .requestMatchers("/api/members/login").permitAll()
-                        .requestMatchers("/api/members/logout").permitAll()
-                        .requestMatchers("/ws/**", "/ws").permitAll()
                         .requestMatchers("/static/**", "/uploads/**").permitAll()
                         
                         // authenticated 경로 명시 (더 구체적인 경로부터)
@@ -70,6 +68,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/contracts/upload").authenticated()
                         .requestMatchers("/api/contracts/{id}").authenticated()
                         .requestMatchers("/api/chat/**").authenticated()
+                        .requestMatchers("/ws/**", "/ws").authenticated()
                         
                         // 마지막에 anyRequest
                         .anyRequest().authenticated()

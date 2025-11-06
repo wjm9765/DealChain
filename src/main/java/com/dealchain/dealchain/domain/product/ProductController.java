@@ -141,10 +141,23 @@ public class ProductController {
         try {
             List<Product> products = productService.findAllProducts();
             
+            // description과 memberId를 제외한 상품 정보만 추출
+            List<Map<String, Object>> productList = products.stream()
+                    .map(product -> {
+                        Map<String, Object> productMap = new HashMap<>();
+                        productMap.put("id", product.getId());
+                        productMap.put("productName", product.getProductName());
+                        productMap.put("title", product.getTitle());
+                        productMap.put("price", product.getPrice());
+                        productMap.put("productImage", product.getProductImage() != null ? product.getProductImage() : "");
+                        return productMap;
+                    })
+                    .toList();
+            
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("products", products);
-            response.put("count", products.size());
+            response.put("products", productList);
+            response.put("count", productList.size());
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {

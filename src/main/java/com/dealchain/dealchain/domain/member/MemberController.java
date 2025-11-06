@@ -119,6 +119,7 @@ public class MemberController {
         cookie.setHttpOnly(true);
         cookie.setPath("/");
         cookie.setMaxAge(0);
+        cookie.setSecure(true);
         response.addCookie(cookie);
 
         Map<String, Object> responseBody = new HashMap<>();
