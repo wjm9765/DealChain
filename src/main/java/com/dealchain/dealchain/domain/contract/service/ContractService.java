@@ -630,6 +630,16 @@ public class ContractService {
         Contract contract = new Contract(filePath, sellerId, buyerId, roomId, encryptedHash);
         Contract savedContract = contractRepository.save(contract);
 
+        Optional<ContractData> contractDataOptional = contractDataRepository.findByRoomIdAndSellerIdAndBuyerId(roomId, sellerId, buyerId);
+        contractDataOptional.ifPresent(cd -> {
+            try {
+                // 서명 테이블은 근거를 위해 유지
+                contractDataRepository.delete(cd);
+            } catch (Exception e) {
+                log.warn("ContractData 삭제 실패 roomId={} sellerId={} buyerId={} : {}", roomId, sellerId, buyerId, e.getMessage());
+            }
+        });
+
         // DealTracking 기록 (SAVE)
         recordDealTracking(savedContract, "SAVE", null);
 
