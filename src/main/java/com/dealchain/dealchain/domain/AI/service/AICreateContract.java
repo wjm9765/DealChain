@@ -29,7 +29,9 @@ public class AICreateContract {
     private String systemPrompt;
     private String systemReasonPrompt;
 
-    public AICreateContract(BedrockRuntimeClient bedrockClient, ContractDtoJsonConverter contractDtoJsonConverter) {
+    public AICreateContract(BedrockRuntimeClient bedrockClient,
+                            ContractDtoJsonConverter contractDtoJsonConverter
+    ) {
         this.bedrockClient = bedrockClient;
         this.contractDtoJsonConverter = contractDtoJsonConverter;
     }
@@ -47,13 +49,28 @@ public class AICreateContract {
         }
     }
 
-    public String invokeClaude(String type, String userChatLog, ContractDefaultReqeustDto reqeustDto) {
+
+    public String invokeClaude(String userChatLog, ContractDefaultReqeustDto reqeustDto, String contract) {
         String defaultInfo = contractDtoJsonConverter.toJson(reqeustDto);
-        String system = "REASON".equalsIgnoreCase(type) ? this.systemReasonPrompt : this.systemPrompt;
-        return callClaudeWithSystem(system, userChatLog, defaultInfo);
+        String system;
+        String content;
+
+        if (contract != null) {
+            String wrappedContract = "<contract>" + contract + "</contract>";
+            system = this.systemReasonPrompt;
+            content = (userChatLog == null ? "" : userChatLog) + wrappedContract + defaultInfo;
+        } else {
+            system = this.systemPrompt;
+            content = (userChatLog == null ? "" : userChatLog) + defaultInfo;
+        }
+
+        return callClaudeWithSystem(system, content);
     }
 
-    private String callClaudeWithSystem(String system, String userChatLog, String defaultInfo) {
+    /**
+     * 실제 Bedrock/Claude 호출을 담당하는 공통 메서드.
+     */
+    private String callClaudeWithSystem(String system, String content) {
         String modelId = "apac.anthropic.claude-3-sonnet-20240229-v1:0";
 
         JSONObject requestBody = new JSONObject();
@@ -64,7 +81,7 @@ public class AICreateContract {
         JSONArray messages = new JSONArray();
         JSONObject userMessage = new JSONObject();
         userMessage.put("role", "user");
-        userMessage.put("content", userChatLog + defaultInfo);
+        userMessage.put("content", content);
         messages.put(userMessage);
 
         requestBody.put("messages", messages);

@@ -3,14 +3,14 @@ package com.dealchain.dealchain.domain.contract.service;
 
 import java.io.UnsupportedEncodingException;
 import com.dealchain.dealchain.domain.AI.dto.ContractDefaultReqeustDto;
+import com.dealchain.dealchain.domain.AI.dto.RationaleResponseDto;
+import com.dealchain.dealchain.domain.AI.service.*;
 import com.dealchain.dealchain.domain.contract.dto.*;
 import com.dealchain.dealchain.domain.contract.repository.ContractDataRepository;
 import com.dealchain.dealchain.domain.member.MemberRepository;
 import com.dealchain.dealchain.domain.security.ContractEncryptionException;
+import com.dealchain.dealchain.domain.security.XssSanitizer;
 import com.dealchain.dealchain.util.EncryptionUtil;
-import com.dealchain.dealchain.domain.AI.service.AICreateContract;
-import com.dealchain.dealchain.domain.AI.service.AIHelpService;
-import com.dealchain.dealchain.domain.AI.service.ChatPaser;
 import com.dealchain.dealchain.domain.DealTracking.dto.DealTrackingRequest;
 import com.dealchain.dealchain.domain.DealTracking.service.DealTrackingService;
 import com.dealchain.dealchain.domain.chat.entity.ChatRoom;
@@ -63,6 +63,9 @@ public class ContractService {
     private final ObjectMapper objectMapper;
     private final MemberRepository memberRepository;
     private final NotificationService notificationService;
+    private final ContractJsonConverter contractJsonConverter;
+    private final RationaleJsonConverter rationaleJsonConverter;
+    private final XssSanitizer xssSanitizer;
 
     public ContractService(ContractRepository contractRepository, 
                           S3UploadService s3UploadService,
@@ -79,6 +82,9 @@ public class ContractService {
                            ObjectMapper objectMapper,
                            NotificationService notificationService,
                            SignTableService signTableService,
+                           ContractJsonConverter contractJsonConverter,
+                           RationaleJsonConverter rationaleJsonConverter,
+                           XssSanitizer xssSanitizer,
                            AIHelpService aiHelpService) {
         this.contractRepository = contractRepository;
         this.s3UploadService = s3UploadService;
@@ -96,6 +102,9 @@ public class ContractService {
         this.memberRepository = memberRepository;
         this.notificationService = notificationService;
         this.signTableService = signTableService;
+        this.contractJsonConverter = contractJsonConverter;
+        this.rationaleJsonConverter = rationaleJsonConverter;
+        this.xssSanitizer =xssSanitizer;
     }
 
     public String getSummaryofContract(String contract){
@@ -234,9 +243,26 @@ public class ContractService {
         ContractData contractData = contractDataRepository.findByRoomIdAndSellerIdAndBuyerId(roomId, sellerId, buyerId)
                 .orElseThrow(() -> new IllegalArgumentException("수정할 기존 계약서 데이터를 찾을 수 없습니다."));
 
+        String cleanjson = xssSanitizer.sanitizeToPlainText(requestDto.getEditjson());
 
-        // 2b. 요약본 생성
-        String newSummary = getSummaryofContract(requestDto.getEditjson());
+
+        String sellerName = memberRepository.findNameById(sellerId)
+                .orElseThrow(() -> new IllegalArgumentException("판매자 정보를 찾을 수 없습니다. sellerId=" + sellerId));
+        String buyerName = memberRepository.findNameById(buyerId)
+                .orElseThrow(() -> new IllegalArgumentException("구매자 정보를 찾을 수 없습니다. buyerId=" + buyerId));
+        ContractDefaultReqeustDto default_request = ContractDefaultReqeustDto.builder()
+                .seller_id(sellerId).buyer_id(buyerId)
+                .seller_name(sellerName).buyer_name(buyerName).product(product).build();
+
+
+        String chatLog = chatPaser.buildSenderToContentsJsonByRoomId(roomId);
+        String reason = aiCreateContract.invokeClaude(chatLog,default_request,cleanjson);
+        //여기에 AI 계약서
+        String summary = getSummaryofContract(cleanjson);//요약 버전
+
+        com.dealchain.dealchain.domain.AI.dto.ContractResponseDto contractResponseDto = contractJsonConverter.fromJson(cleanjson);
+        RationaleResponseDto rationaleResponseDto = rationaleJsonConverter.fromJson(reason);
+
 
 
         // 새로운 계약서 내용을 암호화
@@ -263,8 +289,9 @@ public class ContractService {
         // 수정된 '새' 계약서와 '새' 요약본을 반환
         return ContractResponseDto.builder()
                 .isSuccess(true)
-                .data(requestDto.getEditjson())
-                .summary(newSummary)
+                .contractResponseDto(contractResponseDto)
+                .rationaleResponseDto(rationaleResponseDto)
+                .summary(summary)
                 .build();
     }
 
@@ -300,7 +327,7 @@ public class ContractService {
             );//구매자에게 알림 전송
             return ContractResponseDto.builder()
                     .isSuccess(true)
-                    .data("계약서 생성 요청을 판매자에게 보냈습니다.")
+                    .data("구매자에게 계약서 요청을 보냈습니다.")
                     .summary(null)
                     .build();
         }
@@ -320,12 +347,13 @@ public class ContractService {
                 .seller_name(sellerName).buyer_name(buyerName).product(product).build();
 
 
-        String aiContractJson = aiCreateContract.invokeClaude("CREATE",chatLog, default_request);
-        String reason = aiCreateContract.invokeClaude("REASON",chatLog,default_request);
+        String aiContractJson = aiCreateContract.invokeClaude(chatLog, default_request,null);
+        String reason = aiCreateContract.invokeClaude(chatLog,default_request,aiContractJson);
         //여기에 AI 계약서
         String summary = getSummaryofContract(aiContractJson);//요약 버전
 
-        //String all_result = "{"+aiContractJson+"\n"+reason+"\n"+summary+"}";
+        com.dealchain.dealchain.domain.AI.dto.ContractResponseDto contractResponseDto = contractJsonConverter.fromJson(aiContractJson);
+        RationaleResponseDto rationaleResponseDto = rationaleJsonConverter.fromJson(reason);
 
 
         // --- 3. [DB 저장] (Transaction) ---
@@ -357,7 +385,8 @@ public class ContractService {
         if (isCallerSeller) {//판매자가 생성을 요청했을 시
             return ContractResponseDto.builder()
                     .isSuccess(true)
-                    .data(aiContractJson)
+                    .contractResponseDto(contractResponseDto)
+                    .rationaleResponseDto(rationaleResponseDto)
                     .summary(summary)
                     .build();
 

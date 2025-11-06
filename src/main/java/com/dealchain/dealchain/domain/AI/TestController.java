@@ -1,28 +1,27 @@
 package com.dealchain.dealchain.domain.AI;
 
-import com.dealchain.dealchain.domain.AI.service.SageMakerService;
+import com.dealchain.dealchain.domain.AI.service.DetectService;
+import com.dealchain.dealchain.domain.AI.dto.FraudDetectionResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@Slf4j // 로그 사용 (선택 사항)
+@Slf4j
 @RestController
-@RequiredArgsConstructor // SageMakerService를 생성자 주입 받습니다.
+@RequiredArgsConstructor
 public class TestController {
 
-    // 실제 SageMakerService 빈을 주입받습니다.
-    private final SageMakerService sageMakerService;
+    private final DetectService detectService;
 
     /**
-     * SageMaker 엔드포인트 호출을 테스트하기 위한 GET 컨트롤러
+     * API Gateway 호출을 테스트하기 위한 GET 컨트롤러
      * 호출 방법: (GET) http://localhost:8080/test
      */
     @GetMapping("/test")
-    public void testSageMakerEndpoint() {
-        log.info("GET /test 요청 수신. SageMaker 실제 호출을 테스트합니다.");
+    public void testApiGatewayEndpoint() {
+        log.info("GET /test 요청 수신. API Gateway 실제 호출을 테스트합니다.");
 
-        // [요청사항] 하드코딩된 입력 JSON (Java 15+ Text Block)
         final String hardcodedChatLog = """
                 {
                   "chat_history": [
@@ -45,21 +44,19 @@ public class TestController {
                     {"id": 1, "message": "근데 이 제품은 한정 판매라서 빠르게 처리해야 합니다. 입금 확인되면 바로 택배로 보내드릴게요."},
                     {"id": 2, "message": "알겠습니다. 정말 감사합니다!"}
                   ]
-                }\
+                }
+                
                 """;
 
         try {
-            // [요청사항] 실제 SageMakerService 호출
-            String aiResponse = sageMakerService.invokeEndpoint(hardcodedChatLog);
+            FraudDetectionResponse aiResponse = detectService.callDetectEndpoint(hardcodedChatLog);
 
-            // [요청사항] sout으로 결과 출력
-            System.out.println("--- 🚀 SageMaker 실제 응답 🚀 ---");
+            System.out.println("--- 🚀 API Gateway 실제 응답 🚀 ---");
             System.out.println(aiResponse);
             System.out.println("-----------------------------------");
 
         } catch (Exception e) {
-            log.error("SageMaker /test 엔드포인트 호출 중 오류 발생", e);
-            // 오류 발생 시 콘솔에 스택 트레이스 출력
+            log.error("API Gateway /test 엔드포인트 호출 중 오류 발생", e);
             e.printStackTrace();
         }
     }

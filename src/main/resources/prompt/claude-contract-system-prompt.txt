@@ -24,7 +24,6 @@ other_terms: 기타 거래 조건에 대한 대화가 있으면 추가 아니면
 (JSON Template to fill)
 {
     "parties": {
-
         "seller": {name}"
         "buyer": {name}"
     },
@@ -54,6 +53,9 @@ other_terms: 기타 거래 조건에 대한 대화가 있으면 추가 아니면
     "other_terms": {
         "technical_specs": "N/A",
         "general_terms": "N/A"
+    },
+    "escrow": {
+      "details": "N/A"
     }
 }
 """
