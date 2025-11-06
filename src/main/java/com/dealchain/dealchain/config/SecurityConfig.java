@@ -32,6 +32,8 @@ public class SecurityConfig {
 
                     //나중에 삭제 필요
                     config.setAllowedOriginPatterns(List.of("http://localhost:*"));
+                    config.setAllowedOriginPatterns(List.of("http://127.0.0.1:*"));
+
 
                     config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
                     config.setAllowedHeaders(List.of("*"));
