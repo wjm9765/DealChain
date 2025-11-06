@@ -31,9 +31,29 @@ public class APIChatController {
     //채팅 기록 조회
     @PostMapping("/getmessages")
     public ResponseEntity<ChatMessageRessponseDto> getChatMessages(
-            @RequestBody ChatMessageRequestDto requestDto
+            @RequestBody ChatMessageRequestDto requestDto,
+            Authentication authentication
     ) {
-        ChatMessageRessponseDto response = chatService.getMessage(requestDto);
+        if (authentication == null || authentication.getName() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "토큰이 존재하지 않습니다.");
+        }
+        Long principalId;
+        try {
+            principalId = Long.valueOf(authentication.getName());
+        } catch (NumberFormatException e) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "토큰의 사용자 ID 형식이 유효하지 않습니다: " + authentication.getName());
+        }
+
+        Long userId = requestDto.getUser();
+        if (userId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "userId가 없습니다.");
+        }
+
+        if (!principalId.equals(userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "토큰의 사용자와 요청의 userId가 일치하지 않습니다: " + authentication.getName());
+        }
+
+        ChatMessageRessponseDto response = chatService.getMessage(requestDto,principalId);
         return ResponseEntity.ok(response);
     }
 

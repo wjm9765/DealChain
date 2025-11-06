@@ -518,8 +518,6 @@ public class ContractService {
             JsonNode dbContractNode = objectMapper.readTree(decryptedContractJson);
             //  클라이언트가 전달한 JSON 문자열을 JsonNode 객체로 변환
             JsonNode clientContractNode = objectMapper.readTree(contract);
-            //System.out.println("dbContractNode: " + dbContractNode.toString());
-            //System.out.println("clientContractNode: " + clientContractNode.toString());
             //  두 JSON 객체의 구조와 값이 완전히 동일한지 비교 수행
             if (!dbContractNode.equals(clientContractNode)) {
                 log.warn("계약서 서명 시도 중 내용 불일치 감지. RoomId: {}", roomId);
@@ -645,46 +643,46 @@ public class ContractService {
 
         return savedContract;
     }
-
-
-    /**
-     * ID로 Contract의 PDF를 교체합니다. (같은 경로로 업로드하여 덮어씁니다)
-     *
-     * @param id      Contract ID
-     * @param pdfFile 새로운 PDF 파일
-     * @return 업데이트된 Contract 엔티티
-     */
-    public Contract updateContractPdf(Long id, MultipartFile pdfFile) {
-        if (pdfFile == null || pdfFile.isEmpty()) {
-            throw new IllegalArgumentException("PDF 파일이 제공되지 않았습니다.");
-        }
-
-        Contract contract = contractRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 계약서입니다."));
-
-        String existingFilePath = contract.getFilePath();
-
-        // S3의 같은 경로에 새로운 PDF 업로드 (기존 파일 자동 덮어쓰기)
-        s3UploadService.uploadPdfToPath(pdfFile, existingFilePath);
-
-        // PDF 파일의 내용으로부터 새로운 해시값 생성 및 암호화
-        String hashValue = hashService.generateHashFromFile(pdfFile);
-        String encryptedHash;
-        try {
-            encryptedHash = encryptionUtil.encryptHashWithIds(hashValue, contract.getSellerId(), contract.getBuyerId());
-        } catch (Exception e) {
-            throw new RuntimeException("해시값 암호화 중 오류가 발생했습니다: " + e.getMessage(), e);
-        }
-        contract.setEncryptedHash(encryptedHash);
-
-        // DB의 filePath와 encryptedHash 업데이트
-        Contract updatedContract = contractRepository.save(contract);
-
-        // DealTracking 기록 (EDIT)
-        recordDealTracking(updatedContract, "EDIT", null);
-
-        return updatedContract;
-    }
+//
+//
+//    /**
+//     * ID로 Contract의 PDF를 교체합니다. (같은 경로로 업로드하여 덮어씁니다)
+//     *
+//     * @param id      Contract ID
+//     * @param pdfFile 새로운 PDF 파일
+//     * @return 업데이트된 Contract 엔티티
+//     */
+//    public Contract updateContractPdf(Long id, MultipartFile pdfFile) {
+//        if (pdfFile == null || pdfFile.isEmpty()) {
+//            throw new IllegalArgumentException("PDF 파일이 제공되지 않았습니다.");
+//        }
+//
+//        Contract contract = contractRepository.findById(id)
+//                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 계약서입니다."));
+//
+//        String existingFilePath = contract.getFilePath();
+//
+//        // S3의 같은 경로에 새로운 PDF 업로드 (기존 파일 자동 덮어쓰기)
+//        s3UploadService.uploadPdfToPath(pdfFile, existingFilePath);
+//
+//        // PDF 파일의 내용으로부터 새로운 해시값 생성 및 암호화
+//        String hashValue = hashService.generateHashFromFile(pdfFile);
+//        String encryptedHash;
+//        try {
+//            encryptedHash = encryptionUtil.encryptHashWithIds(hashValue, contract.getSellerId(), contract.getBuyerId());
+//        } catch (Exception e) {
+//            throw new RuntimeException("해시값 암호화 중 오류가 발생했습니다: " + e.getMessage(), e);
+//        }
+//        contract.setEncryptedHash(encryptedHash);
+//
+//        // DB의 filePath와 encryptedHash 업데이트
+//        Contract updatedContract = contractRepository.save(contract);
+//
+//        // DealTracking 기록 (EDIT)
+//        recordDealTracking(updatedContract, "EDIT", null);
+//
+//        return updatedContract;
+//    }
 
     /**
      * ID로 Contract를 삭제합니다. (DB와 S3에서 모두 삭제)
@@ -946,7 +944,7 @@ public class ContractService {
                 }
             }
 
-            recordDealTracking(contract, "READ_COMPLETE", deviceInfo); // PDF 조회 추적
+            recordDealTracking(contract, "READ_BOTH_SIGN", deviceInfo); // PDF 조회 추적
 
             return new GetContractResponse(status, pdfBytes); // PDF 반환
 
@@ -965,7 +963,7 @@ public class ContractService {
             }
 
             // DealTracking 기록 (READ_DRAFT)
-            recordDealTrackingForCreate("READ_NOT_COMPLETE", roomId, sellerId, buyerId, deviceInfo);
+            recordDealTrackingForCreate("READ_NOT_BOTH_SIGN", roomId, sellerId, buyerId, deviceInfo);
 
             String summary = getSummaryofContract(decryptedJson);
             return new GetContractResponse(status, decryptedJson,summary); // JSON 반환
