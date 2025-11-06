@@ -18,11 +18,13 @@ public class ContractHelpResponseDto {
     private ItemDetails item_details;
     private Payment payment;
     private Delivery delivery;
+    private Escrow escrow;
     private CancellationPolicy cancellation_policy;
     private RefundPolicy refund_policy;
     private DisputeResolution dispute_resolution;
     private OtherTerms other_terms;
     private Reason reason;
+    private String final_summary;
 
     @Builder
     @NoArgsConstructor
@@ -31,8 +33,20 @@ public class ContractHelpResponseDto {
     @Setter
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class Parties {
-        private String seller;
-        private String buyer;
+        private PartyInfo buyer;
+        private PartyInfo seller;
+
+        @Builder
+        @NoArgsConstructor
+        @AllArgsConstructor
+        @Getter
+        @Setter
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        public static class PartyInfo {
+            private String address;
+            private String name;
+            private String phone;
+        }
     }
 
     @Builder
@@ -68,6 +82,16 @@ public class ContractHelpResponseDto {
     public static class Delivery {
         private String method;
         private String schedule;
+    }
+
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Getter
+    @Setter
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class Escrow {
+        private String details;
     }
 
     @Builder
@@ -122,6 +146,12 @@ public class ContractHelpResponseDto {
         private String payment;
         private String delivery;
         private String cancellation_policy;
+        private String contract_date;
+        private String dispute_resolution;
+        private String escrow;
+        private String other_terms;
+        private String parties;
+        private String refund_policy;
     }
 }
 
