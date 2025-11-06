@@ -32,6 +32,8 @@ public class SecurityConfig {
 
                     //나중에 삭제 필요
                     config.setAllowedOriginPatterns(List.of("http://localhost:*"));
+                    config.setAllowedOriginPatterns(List.of("http://127.0.0.1:*"));
+
 
                     config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
                     config.setAllowedHeaders(List.of("*"));
@@ -54,6 +56,8 @@ public class SecurityConfig {
                         // permitAll 경로 먼저 명시 (더 구체적인 경로부터)
                         .requestMatchers("/api/members/register").permitAll()
                         .requestMatchers("/api/members/login").permitAll()
+                        .requestMatchers("/api/products/{id}/image").permitAll()  // 상품 이미지는 공개 접근 허용
+                        .requestMatchers("/ws/**", "/ws").permitAll()
                         .requestMatchers("/static/**", "/uploads/**").permitAll()
                         
                         // authenticated 경로 명시 (더 구체적인 경로부터)
@@ -68,7 +72,6 @@ public class SecurityConfig {
                         .requestMatchers("/api/contracts/upload").authenticated()
                         .requestMatchers("/api/contracts/{id}").authenticated()
                         .requestMatchers("/api/chat/**").authenticated()
-                        .requestMatchers("/ws/**", "/ws").authenticated()
                         
                         // 마지막에 anyRequest
                         .anyRequest().authenticated()

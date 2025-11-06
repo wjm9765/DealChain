@@ -33,8 +33,8 @@ public class ContractDtoJsonConverter {
 
 
         sb.append("<product>\n");
-        sb.append("\"sellerId\":").append(dto.getSeller_name()).append("\n");
-        sb.append("\"buyerId\":").append(dto.getBuyer_name()).append("\n");
+        sb.append("\"sellerId\":").append(dto.getSeller_id()).append("\n");
+        sb.append("\"buyerId\":").append(dto.getBuyer_id()).append("\n");
         if (p != null) {
             if (p.getId() != null) sb.append("\"id\":").append(p.getId()).append("\n");
             appendQuoted(sb, "productName", p.getProductName());

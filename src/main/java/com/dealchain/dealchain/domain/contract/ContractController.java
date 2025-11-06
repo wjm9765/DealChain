@@ -23,9 +23,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.HashMap;
+
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -301,7 +300,7 @@ public class ContractController {
 
     @GetMapping("/contractLists")
     public ResponseEntity<?> getContractLists( // 반환 타입을 '?' (와일드카드)로 변경
-                                               @RequestParam("roomId") String roomId,
+                                               //@RequestParam("roomId") String roomId,
                                                @RequestHeader(value = "User-Agent", defaultValue = "Unknown") String deviceInfo) {
 
         try {
@@ -316,7 +315,6 @@ public class ContractController {
                     .body(e.getMessage());
 
         } catch (IllegalArgumentException e) {
-            // [입력값 오류] 존재하지 않는 roomId 등
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST) // 400 Bad Request
                     .body(e.getMessage());
@@ -597,35 +595,5 @@ public class ContractController {
         }
     }
 
-
-
-    /**
-     * ID로 계약서를 삭제합니다. (DB와 S3에서 모두 삭제)
-     *
-     * DELETE /api/contracts/{id}
-     */
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> deleteContract(@PathVariable("id") Long id) {
-        try {
-            contractService.deleteContract(id);
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("message", "계약서가 삭제되었습니다.");
-            response.put("contractId", id);
-
-            return ResponseEntity.ok(response);
-        } catch (IllegalArgumentException e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", e.getMessage());
-            return ResponseEntity.badRequest().body(response);
-        } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "계약서 삭제 중 오류가 발생했습니다: " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
-        }
-    }
 }
 
