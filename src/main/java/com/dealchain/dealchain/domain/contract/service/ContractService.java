@@ -1,10 +1,13 @@
 package com.dealchain.dealchain.domain.contract.service;
 
 import com.dealchain.dealchain.domain.AI.dto.ContractDefaultReqeustDto;
+import com.dealchain.dealchain.domain.chat.entity.ChatNotification;
+import com.dealchain.dealchain.domain.chat.repository.ChatNotificationRepository;
 import com.dealchain.dealchain.domain.contract.dto.*;
 import com.dealchain.dealchain.domain.contract.repository.ContractDataRepository;
 import com.dealchain.dealchain.domain.member.Member;
 import com.dealchain.dealchain.domain.member.MemberRepository;
+import com.dealchain.dealchain.domain.security.XssSanitizer;
 import com.dealchain.dealchain.util.EncryptionUtil;
 import com.dealchain.dealchain.domain.AI.service.AICreateContract;
 import com.dealchain.dealchain.domain.AI.service.AIHelpService;
@@ -63,6 +66,9 @@ public class ContractService {
     private final ContractDataRepository contractDataRepository;
     private final ObjectMapper objectMapper;
     private final MemberRepository memberRepository;
+    private final ChatNotificationRepository chatNotificationRepository;
+    private final XssSanitizer xssSanitizer;
+
     public ContractService(ContractRepository contractRepository, 
                           S3UploadService s3UploadService,
                           HashService hashService,
@@ -76,6 +82,8 @@ public class ContractService {
                            ContractDataRepository contractDataRepository,
                            MemberRepository memberRepository,
                            ObjectMapper objectMapper,
+                           ChatNotificationRepository chatNotificationRepository,
+                            XssSanitizer xssSanitizer,
                            AIHelpService aiHelpService) {
         this.contractRepository = contractRepository;
         this.s3UploadService = s3UploadService;
@@ -91,6 +99,8 @@ public class ContractService {
         this.contractDataRepository = contractDataRepository;
         this.objectMapper=objectMapper;
         this.memberRepository = memberRepository;
+        this.chatNotificationRepository = chatNotificationRepository;
+        this.xssSanitizer = xssSanitizer;
     }
 
     public String getSummaryofContract(String contract){
@@ -130,7 +140,15 @@ public class ContractService {
             throw new IllegalArgumentException("판매자가 서명을 해야합니다.");
         }
         //2. 구매자에게 서명 요청 알림 전송
-        sendSignContractRequestNotification(sellerId,requestDto.getRoomId(),buyerId);
+
+        sendNotification(
+                buyerId,
+                sellerId,
+                roomId,
+                "서명 요청이 있습니다.",
+                "SIGN_REQUEST",
+                null
+        );//
 
         //거래 추적 테이블 작성 SIGN_REQUEST
         recordDealTrackingForCreate("SIGN_REQUEST",requestDto.getRoomId(),sellerId,buyerId,requestDto.getDeviceInfo());
@@ -177,13 +195,15 @@ public class ContractService {
         signRepository.save(signTable); // 변경 사항 저장
 
         //판매자에게 '거절' 알림 전송
-        sendContractRequestNotification(
-                sellerId,
-                roomId,
-                buyerId,
-                "구매자가 계약서 서명을 거절했습니다."
-        );
 
+        sendNotification(
+                sellerId,
+                buyerId,
+                roomId,
+                "계약서 서명을 거절했습니다.",
+                "CONTRACT_REJECT",
+                null
+        );//
         //거래 추적 테이블 작성
         recordDealTrackingForCreate("REJECT",requestDto.getRoomId(),sellerId,buyerId,requestDto.getDeviceInfo());
 
@@ -276,7 +296,14 @@ public class ContractService {
         }
 
         if(isCallerBuyer) {//만약 구매자가 요청했으면 AI 호출하지 않고 바로 return
-            sendContractRequestNotification(sellerId, roomId, buyerId, "계약서 검토 요청이 있습니다.");//구매자에게 알림 전송
+            sendNotification(
+                    sellerId,
+                    buyerId,
+                    roomId,
+                     "계약서 검토 요청이 있습니다.",
+                    "CONTRACT_REQUEST",
+                    null
+            );//구매자에게 알림 전송
             return ContractResponseDto.builder()
                     .isSuccess(true)
                     .data("계약서 생성 요청을 판매자에게 보냈습니다.")
@@ -295,6 +322,7 @@ public class ContractService {
 
 
         ContractDefaultReqeustDto default_request = ContractDefaultReqeustDto.builder()
+                .seller_id(sellerId).buyer_id(buyerId)
                 .seller_name(sellerName).buyer_name(buyerName).product(product).build();
 
 
@@ -339,53 +367,87 @@ public class ContractService {
             throw new SecurityException("알 수 없는 에러 발생");
         }
     }
+//
+//    //판매자가 서명 완료하고 구매자한테 서명 요청하는것
+//    @Async
+//    public void sendSignContractRequestNotification(Long sellerId, String roomId, Long buyerId) {
+//        try {
+//            Map<String, String> notificationPayload = Map.of(
+//                    "type", "CONTRACT_REQUEST",
+//                    "message", " 계약서 서명 요청이 있습니다.",
+//                    "roomId", roomId
+//            );
+//            // [핵심] '판매자'의 '개인 알림 채널'로 메시지 전송
+//            messagingTemplate.convertAndSendToUser(
+//                    String.valueOf(buyerId),
+//                    "/queue/notifications",
+//                    notificationPayload
+//            );
+//
+//            log.info("판매자(ID: {})에게 계약서 서명 요청 알림 전송 완료 (RoomId: {})", sellerId, roomId);
+//
+//        } catch (Exception e) {
+//            log.warn("WebSocket 알림 전송 실패 (계약서 생성은 성공함): {}", e.getMessage());
+//        }
+//    }
+//
+//    //구매자가 계약서 생성 요청을 날림
+//    @Async
+//    public void sendContractRequestNotification(Long sellerId, String roomId, Long buyerId,String message) {
+//        try {
+//            Map<String, String> notificationPayload = Map.of(
+//                    "type", "CONTRACT_REQUEST",
+//                    "message", message,
+//                    "roomId", roomId
+//            );
+//            // [핵심] '판매자'의 '개인 알림 채널'로 메시지 전송
+//            messagingTemplate.convertAndSendToUser(
+//                    String.valueOf(sellerId),
+//                    "/queue/notifications",
+//                    notificationPayload
+//            );
+//
+//            log.info("판매자(ID: {})에게 계약서 검토 요청 알림 전송 완료 (RoomId: {})", sellerId, roomId);
+//
+//        } catch (Exception e) {
+//            log.warn("WebSocket 알림 전송 실패 (계약서 생성은 성공함): {}", e.getMessage());
+//        }
+//    }
 
-    //판매자가 서명 완료하고 구매자한테 서명 요청하는것
+    //개인 알림 채널로 보냄
+    //위의 두개를 이걸로 통합할 것
     @Async
-    public void sendSignContractRequestNotification(Long sellerId, String roomId, Long buyerId) {
+    @Transactional
+    public void sendNotification(Long who,Long sender, String roomId,String message,String type,String AIcontent) {
+
+        //AIcontent = AI가 왜 그렇게 판단했는지 근거가 되는 json 형태
         try {
             Map<String, String> notificationPayload = Map.of(
-                    "type", "CONTRACT_REQUEST",
-                    "message", " 계약서 서명 요청이 있습니다.",
-                    "roomId", roomId
-            );
-            // [핵심] '판매자'의 '개인 알림 채널'로 메시지 전송
-            messagingTemplate.convertAndSendToUser(
-                    String.valueOf(buyerId),
-                    "/queue/notifications",
-                    notificationPayload
-            );
-
-            log.info("판매자(ID: {})에게 계약서 서명 요청 알림 전송 완료 (RoomId: {})", sellerId, roomId);
-
-        } catch (Exception e) {
-            log.warn("WebSocket 알림 전송 실패 (계약서 생성은 성공함): {}", e.getMessage());
-        }
-    }
-
-    /**
-     * [알림] WebSocket을 통해 '판매자'에게 계약서 검토 요청 알림을 'Push'합니다.
-     * (이 로직은 @Async로 분리하는 것이 더 좋습니다.)
-     */
-    @Async
-    public void sendContractRequestNotification(Long sellerId, String roomId, Long buyerId,String message) {
-        try {
-            Map<String, String> notificationPayload = Map.of(
-                    "type", "CONTRACT_REQUEST",
+                    "type", type,
                     "message", message,
                     "roomId", roomId
             );
-            // [핵심] '판매자'의 '개인 알림 채널'로 메시지 전송
+            //알림 전송
             messagingTemplate.convertAndSendToUser(
-                    String.valueOf(sellerId),
+                    String.valueOf(who),
                     "/queue/notifications",
                     notificationPayload
             );
 
-            log.info("판매자(ID: {})에게 계약서 검토 요청 알림 전송 완료 (RoomId: {})", sellerId, roomId);
+            ChatNotification chatNotification = ChatNotification.builder()
+                    .memberId(who)
+                    .senderId(sender)
+                    .roomId(roomId)
+                    .type(ChatNotification.NotificationType.valueOf(type))
+                    .AIContent(AIcontent)
+                    .build();
+
+            chatNotificationRepository.save(chatNotification);
+
+            log.info("(ID: {})에게 {}: {}  알림 전송 완료 (RoomId: {})", who,type,message, roomId);
 
         } catch (Exception e) {
-            log.warn("WebSocket 알림 전송 실패 (계약서 생성은 성공함): {}", e.getMessage());
+            log.warn("WebSocket 알림 전송 실패: {}", e.getMessage());
         }
     }
 

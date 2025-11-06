@@ -346,7 +346,7 @@ public class ContractController {
 
     @GetMapping("/contractLists")
     public ResponseEntity<?> getContractLists( // 반환 타입을 '?' (와일드카드)로 변경
-                                               @RequestParam("roomId") String roomId,
+                                               //@RequestParam("roomId") String roomId,
                                                @RequestHeader(value = "User-Agent", defaultValue = "Unknown") String deviceInfo) {
 
         try {
@@ -361,7 +361,6 @@ public class ContractController {
                     .body(e.getMessage());
 
         } catch (IllegalArgumentException e) {
-            // [입력값 오류] 존재하지 않는 roomId 등
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST) // 400 Bad Request
                     .body(e.getMessage());

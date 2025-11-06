@@ -25,6 +25,9 @@ repositories {
 }
 
 dependencies {
+    //sqs 의존성
+    implementation platform("io.awspring.cloud:spring-cloud-aws-dependencies:3.0.1")
+    implementation 'io.awspring.cloud:spring-cloud-aws-starter-sqs'
     //pdf 생성
     implementation 'org.apache.pdfbox:pdfbox:3.0.2'
     // JSON 처리용
