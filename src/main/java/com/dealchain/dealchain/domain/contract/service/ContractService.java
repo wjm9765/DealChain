@@ -320,8 +320,13 @@ public class ContractService {
                 .seller_name(sellerName).buyer_name(buyerName).product(product).build();
 
 
-        String aiContractJson = aiCreateContract.invokeClaude(chatLog, default_request);
+        String aiContractJson = aiCreateContract.invokeClaude("CREATE",chatLog, default_request);
+        String reason = aiCreateContract.invokeClaude("REASON",chatLog,default_request);
+        //여기에 AI 계약서랑
         String summary = getSummaryofContract(aiContractJson);//요약 버전
+
+        //String all_result = "{"+aiContractJson+"\n"+reason+"\n"+summary+"}";
+
 
         // --- 3. [DB 저장] (Transaction) ---
 

@@ -1,4 +1,3 @@
-// java
 package com.dealchain.dealchain.domain.AI.service;
 
 import com.dealchain.dealchain.domain.AI.dto.ContractDefaultReqeustDto;
@@ -48,11 +47,10 @@ public class AICreateContract {
         }
     }
 
-    public String invokeClaude(String userChatLog, ContractDefaultReqeustDto reqeustDto) {
+    public String invokeClaude(String type, String userChatLog, ContractDefaultReqeustDto reqeustDto) {
         String defaultInfo = contractDtoJsonConverter.toJson(reqeustDto);
-        String first = callClaudeWithSystem(this.systemPrompt, userChatLog, defaultInfo);
-        String second = callClaudeWithSystem(this.systemReasonPrompt, userChatLog, defaultInfo);
-        return first + "\n" + second;
+        String system = "REASON".equalsIgnoreCase(type) ? this.systemReasonPrompt : this.systemPrompt;
+        return callClaudeWithSystem(system, userChatLog, defaultInfo);
     }
 
     private String callClaudeWithSystem(String system, String userChatLog, String defaultInfo) {
