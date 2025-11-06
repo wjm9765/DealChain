@@ -322,7 +322,7 @@ public class ContractService {
 
         String aiContractJson = aiCreateContract.invokeClaude("CREATE",chatLog, default_request);
         String reason = aiCreateContract.invokeClaude("REASON",chatLog,default_request);
-        //여기에 AI 계약서랑
+        //여기에 AI 계약서
         String summary = getSummaryofContract(aiContractJson);//요약 버전
 
         //String all_result = "{"+aiContractJson+"\n"+reason+"\n"+summary+"}";

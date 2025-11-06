@@ -103,7 +103,7 @@ public class FraudDetectionConsumer {
 
 
                 //AI 사기 탐지 모델 호출
-                String AIContent = sageMakerService.invokeEndpoint(chatLog);
+                //String AIContent = sageMakerService.invokeEndpoint(chatLog);
                 System.out.println("9개 메시지 = " + chatLog);
 
 
