@@ -12,6 +12,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.security.core.Authentication;
 
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletResponse;
@@ -140,10 +141,7 @@ public class MemberController {
             Map<String, Object> memberInfo = new HashMap<>();
             memberInfo.put("memberId", member.getMemberId());
             memberInfo.put("id", member.getId());
-            //memberInfo.put("password", member.getPassword());
             memberInfo.put("name", member.getName() != null ? member.getName() : "");
-            //memberInfo.put("ci", member.getCi() != null ? member.getCi() : "");
-            //memberInfo.put("signatureImage", member.getSignatureImage() != null ? member.getSignatureImage() : "");
 
             response.put("member", memberInfo);
 
@@ -156,10 +154,24 @@ public class MemberController {
         }
     }
 
-    // 서명 이미지 조회 API (S3에서 이미지를 가져와서 반환)
+    // 서명 이미지 조회 API (S3에서 이미지를 가져와서 반환) - 본인만 접근 가능
     @GetMapping("/signature/{memberId}")
-    public ResponseEntity<byte[]> getSignatureImage(@PathVariable("memberId") Long memberId) {
+    public ResponseEntity<byte[]> getSignatureImage(@PathVariable("memberId") Long memberId,
+                                                     Authentication authentication) {
         try {
+            // 인증 확인
+            if (authentication == null || !authentication.isAuthenticated()) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+            
+            // 로그인한 사용자의 memberId 가져오기
+            Long loggedInMemberId = Long.valueOf(authentication.getName());
+            
+            // 본인만 접근 가능하도록 검증
+            if (!loggedInMemberId.equals(memberId)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+            
             Member member = memberService.findById(memberId);
             if (member == null || member.getSignatureImage() == null || member.getSignatureImage().isEmpty()) {
                 return ResponseEntity.notFound().build();
