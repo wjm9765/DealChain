@@ -92,7 +92,9 @@ public class MemberController {
             // HttpOnly Cookie 설정
             Cookie cookie = new Cookie("token", token);
             cookie.setHttpOnly(true);
-            cookie.setSecure(true);
+
+            //http에도 토큰 주고 받을 수 있게(https가 아닌 환경을 위해 프로젝트 가정)
+            cookie.setSecure(false);
             cookie.setPath("/");
             cookie.setMaxAge(86400);
 
@@ -102,6 +104,7 @@ public class MemberController {
             responseBody.put("success", true);
             responseBody.put("message", "로그인 성공");
             responseBody.put("memberId", member.getMemberId());
+            responseBody.put("token", cookie.getValue());
             responseBody.put("id", member.getId());
 
             return ResponseEntity.ok(responseBody);
@@ -120,7 +123,9 @@ public class MemberController {
         cookie.setHttpOnly(true);
         cookie.setPath("/");
         cookie.setMaxAge(0);
-        cookie.setSecure(true);
+
+        //대회 특이성을 고려하여 http 통신
+        cookie.setSecure(false);
         response.addCookie(cookie);
 
         Map<String, Object> responseBody = new HashMap<>();
@@ -153,48 +158,48 @@ public class MemberController {
             return ResponseEntity.badRequest().body(response);
         }
     }
-
-    // 서명 이미지 조회 API (S3에서 이미지를 가져와서 반환) - 본인만 접근 가능
-    @GetMapping("/signature/{memberId}")
-    public ResponseEntity<byte[]> getSignatureImage(@PathVariable("memberId") Long memberId,
-                                                     Authentication authentication) {
-        try {
-            // 인증 확인
-            if (authentication == null || !authentication.isAuthenticated()) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-            }
-            
-            // 로그인한 사용자의 memberId 가져오기
-            Long loggedInMemberId = Long.valueOf(authentication.getName());
-            
-            // 본인만 접근 가능하도록 검증
-            if (!loggedInMemberId.equals(memberId)) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-            }
-            
-            Member member = memberService.findById(memberId);
-            if (member == null || member.getSignatureImage() == null || member.getSignatureImage().isEmpty()) {
-                return ResponseEntity.notFound().build();
-            }
-
-            // S3 키 (경로) 가져오기
-            String fileKey = member.getSignatureImage();
-
-            // S3에서 파일 다운로드 (Content-Type 포함)
-            S3UploadService.FileDownloadResult downloadResult = s3UploadService.downloadFileWithContentType(fileKey);
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.parseMediaType(downloadResult.getContentType()));
-            headers.setContentLength(downloadResult.getFileBytes().length);
-
-            return new ResponseEntity<>(downloadResult.getFileBytes(), headers, HttpStatus.OK);
-
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.notFound().build();
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-    }
+//
+//    // 서명 이미지 조회 API (S3에서 이미지를 가져와서 반환) - 본인만 접근 가능
+//    @GetMapping("/signature/{memberId}")
+//    public ResponseEntity<byte[]> getSignatureImage(@PathVariable("memberId") Long memberId,
+//                                                     Authentication authentication) {
+//        try {
+//            // 인증 확인
+//            if (authentication == null || !authentication.isAuthenticated()) {
+//                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+//            }
+//
+//            // 로그인한 사용자의 memberId 가져오기
+//            Long loggedInMemberId = Long.valueOf(authentication.getName());
+//
+//            // 본인만 접근 가능하도록 검증
+//            if (!loggedInMemberId.equals(memberId)) {
+//                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+//            }
+//
+//            Member member = memberService.findById(memberId);
+//            if (member == null || member.getSignatureImage() == null || member.getSignatureImage().isEmpty()) {
+//                return ResponseEntity.notFound().build();
+//            }
+//
+//            // S3 키 (경로) 가져오기
+//            String fileKey = member.getSignatureImage();
+//
+//            // S3에서 파일 다운로드 (Content-Type 포함)
+//            S3UploadService.FileDownloadResult downloadResult = s3UploadService.downloadFileWithContentType(fileKey);
+//
+//            HttpHeaders headers = new HttpHeaders();
+//            headers.setContentType(MediaType.parseMediaType(downloadResult.getContentType()));
+//            headers.setContentLength(downloadResult.getFileBytes().length);
+//
+//            return new ResponseEntity<>(downloadResult.getFileBytes(), headers, HttpStatus.OK);
+//
+//        } catch (IllegalArgumentException e) {
+//            return ResponseEntity.notFound().build();
+//        } catch (RuntimeException e) {
+//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+//        } catch (Exception e) {
+//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+//        }
+//    }
 }

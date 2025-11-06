@@ -12,4 +12,5 @@ public class ChatMessageRequestDto {
     private Long seller; //대화 방에서 판매자
     private Long buyer;  //대화 방에서 구매자
     private Long user;//누가 요청했는지
+
 }

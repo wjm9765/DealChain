@@ -34,6 +34,8 @@ public class APIChatController {
             @RequestBody ChatMessageRequestDto requestDto,
             Authentication authentication
     ) {
+
+        System.out.println(authentication.getName());
         if (authentication == null || authentication.getName() == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "토큰이 존재하지 않습니다.");
         }
