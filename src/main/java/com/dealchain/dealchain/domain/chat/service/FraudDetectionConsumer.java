@@ -2,6 +2,7 @@
 package com.dealchain.dealchain.domain.chat.service;
 
 import com.dealchain.dealchain.domain.AI.service.ChatPaser;
+//import com.dealchain.dealchain.domain.AI.service.FlaskApiService;
 import com.dealchain.dealchain.domain.AI.service.SageMakerService;
 import com.dealchain.dealchain.domain.chat.dto.SQSrequestDto;
 import com.dealchain.dealchain.domain.chat.entity.ChatRoom;
@@ -30,11 +31,11 @@ public class FraudDetectionConsumer {
     private static final String FRAUD_DETECTION_QUEUE = "my-fraud-queue";
 
     private final ObjectMapper objectMapper;
-    private final ContractService contractService;
     private final ChatRoomRepository chatRoomRepository;
     private final ChatPaser chatPaser;
-    private final SageMakerService sageMakerService;
     private final NotificationService notificationService;
+    //private final FlaskApiService flaskApiService;
+
     @Value("${MESSAGE_COUNT}")
     private int batchSize;
 
@@ -103,7 +104,8 @@ public class FraudDetectionConsumer {
 
 
                 //AI 사기 탐지 모델 호출
-                //String AIContent = sageMakerService.invokeEndpoint(chatLog);
+                //flaskApiService.sendPostRequest(chatLog);
+
 
 
                 Optional<ChatRoom> chatRoomOpt = chatRoomRepository.findById(roomId);

@@ -348,13 +348,7 @@ public class ContractService {
 
 
         String aiContractJson = aiCreateContract.invokeClaude(chatLog, default_request,null);
-        String reason = aiCreateContract.invokeClaude(chatLog,default_request,aiContractJson);
-        //여기에 AI 계약서
-        String summary = getSummaryofContract(aiContractJson);//요약 버전
-
         com.dealchain.dealchain.domain.AI.dto.ContractResponseDto contractResponseDto = contractJsonConverter.fromJson(aiContractJson);
-        RationaleResponseDto rationaleResponseDto = rationaleJsonConverter.fromJson(reason);
-
 
         // --- 3. [DB 저장] (Transaction) ---
 
@@ -386,10 +380,7 @@ public class ContractService {
             return ContractResponseDto.builder()
                     .isSuccess(true)
                     .contractResponseDto(contractResponseDto)
-                    .rationaleResponseDto(rationaleResponseDto)
-                    .summary(summary)
                     .build();
-
         }
         else{
             throw new SecurityException("알 수 없는 에러 발생");
@@ -489,7 +480,11 @@ public class ContractService {
 
         // AI 호출 및 변환
         String reasonJson = aiCreateContract.invokeClaude(chatLog, default_request, aiContractJson);
+
+        System.out.println(reasonJson);
+
         RationaleResponseDto rationaleResponseDto = rationaleJsonConverter.fromJson(reasonJson);
+
 
         // 거래 추적
         recordDealTrackingForCreate("REASON", roomId, sellerId, buyerId, requestDto.getDeviceInfo());
