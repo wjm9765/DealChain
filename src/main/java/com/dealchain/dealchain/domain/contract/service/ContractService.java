@@ -456,7 +456,7 @@ public class ContractService {
         // AI 호출 및 변환
         String reasonJson = aiCreateContract.invokeClaude(chatLog, default_request, aiContractJson);
 
-        System.out.println(reasonJson);
+
 
         RationaleResponseDto rationaleResponseDto = rationaleJsonConverter.fromJson(reasonJson);
 
