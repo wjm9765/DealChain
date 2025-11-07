@@ -59,7 +59,6 @@ public class SecurityConfig {
                         .requestMatchers("/api/products/{id}/image").permitAll()  // 상품 이미지는 공개 접근 허용
                         .requestMatchers("/ws/**", "/ws").permitAll()
                         .requestMatchers("/static/**", "/uploads/**").permitAll()
-                        .requestMatchers("/test/**", "/test").permitAll()
 
                         // authenticated 경로 명시 (더 구체적인 경로부터)
                         .requestMatchers("/api/members/**").authenticated()
