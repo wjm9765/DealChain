@@ -43,7 +43,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-                )                //.anonymous(anonymous -> anonymous.disable())
+                )               
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((request, response, authException) -> {
                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
@@ -65,7 +65,6 @@ public class SecurityConfig {
                         .requestMatchers("/api/products/create").authenticated()
                         .requestMatchers("/api/products/{id}/**").authenticated()
                         .requestMatchers("/api/products/{id}").authenticated()
-                        //.requestMatchers("/api/products/list").authenticated()
                         .requestMatchers("/api/products/member/**").authenticated()
                         .requestMatchers("/api/contracts/sign").authenticated()
                         .requestMatchers("/api/contracts/create").authenticated()

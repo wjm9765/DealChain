@@ -44,9 +44,6 @@ import java.util.Optional;
 public class ContractService {
     private static final Logger log = LoggerFactory.getLogger(ContractService.class);
 
-    //@Autowired
-    //private SimpMessagingTemplate messagingTemplate;//알림을 위한 의존성
-
     private final SignTableService signTableService;
     private final ContractRepository contractRepository;
     private final S3UploadService s3UploadService;
@@ -490,113 +487,6 @@ public class ContractService {
             throw new RuntimeException("계약서 복호화 중 오류가 발생했습니다.", e);
         }
     }
-
-//
-//    //판매자가 서명 완료하고 구매자한테 서명 요청하는것
-//    @Async
-//    public void sendSignContractRequestNotification(Long sellerId, String roomId, Long buyerId) {
-//        try {
-//            Map<String, String> notificationPayload = Map.of(
-//                    "type", "CONTRACT_REQUEST",
-//                    "message", " 계약서 서명 요청이 있습니다.",
-//                    "roomId", roomId
-//            );
-//            // [핵심] '판매자'의 '개인 알림 채널'로 메시지 전송
-//            messagingTemplate.convertAndSendToUser(
-//                    String.valueOf(buyerId),
-//                    "/queue/notifications",
-//                    notificationPayload
-//            );
-//
-//            log.info("판매자(ID: {})에게 계약서 서명 요청 알림 전송 완료 (RoomId: {})", sellerId, roomId);
-//
-//        } catch (Exception e) {
-//            log.warn("WebSocket 알림 전송 실패 (계약서 생성은 성공함): {}", e.getMessage());
-//        }
-//    }
-//
-//    //구매자가 계약서 생성 요청을 날림
-//    @Async
-//    public void sendContractRequestNotification(Long sellerId, String roomId, Long buyerId,String message) {
-//        try {
-//            Map<String, String> notificationPayload = Map.of(
-//                    "type", "CONTRACT_REQUEST",
-//                    "message", message,
-//                    "roomId", roomId
-//            );
-//            // [핵심] '판매자'의 '개인 알림 채널'로 메시지 전송
-//            messagingTemplate.convertAndSendToUser(
-//                    String.valueOf(sellerId),
-//                    "/queue/notifications",
-//                    notificationPayload
-//            );
-//
-//            log.info("판매자(ID: {})에게 계약서 검토 요청 알림 전송 완료 (RoomId: {})", sellerId, roomId);
-//
-//        } catch (Exception e) {
-//            log.warn("WebSocket 알림 전송 실패 (계약서 생성은 성공함): {}", e.getMessage());
-//        }
-//    }
-//
-//    //개인 알림 채널로 보냄
-//    //위의 두개를 이걸로 통합할 것
-//    @Async
-//    @Transactional
-//    public void sendNotification(Long who,Long sender, String roomId,String message,String type,String AIcontent) {
-//
-//        //AIcontent = AI가 왜 그렇게 판단했는지 근거가 되는 json 형태
-//        try {
-//            Map<String, String> notificationPayload = Map.of(
-//                    "type", type,
-//                    "message", message,
-//                    "roomId", roomId
-//            );
-//            //알림 전송
-//            messagingTemplate.convertAndSendToUser(
-//                    String.valueOf(who),
-//                    "/queue/notifications",
-//                    notificationPayload
-//            );
-//
-//            ChatNotification chatNotification = ChatNotification.builder()
-//                    .memberId(who)
-//                    .senderId(sender)
-//                    .roomId(roomId)
-//                    .type(ChatNotification.NotificationType.valueOf(type))
-//                    .AIContent(AIcontent)
-//                    .build();
-//
-//            chatNotificationRepository.save(chatNotification);
-//
-//            log.info("(ID: {})에게 {}: {}  알림 전송 완료 (RoomId: {})", who,type,message, roomId);
-//
-//        } catch (Exception e) {
-//            log.warn("WebSocket 알림 전송 실패: {}", e.getMessage());
-//        }
-//    }
-
-//    /**
-//     * 계약서 생성 시 초기 서명 테이블 생성 (중복 방지)
-//     */
-//    @Transactional
-//    public SignTable createInitialSignIfNotExists(String roomId, Product product) {
-//        if (product == null) {
-//            throw new IllegalArgumentException("Product가 필요합니다.");
-//        }
-//        // 중복 방지
-//        Optional<SignTable> existing = signRepository.findByRoomIdAndProductId(roomId, product.getId());
-//        if (existing.isPresent()) {
-//            return existing.get(); // 이미 있으면 기존 객체 반환
-//        }
-//
-//        SignTable signTable = SignTable.builder()
-//                .roomId(roomId)
-//                .productId(product.getId())
-//                .build();
-//
-//        return signRepository.save(signTable); // 저장 후 영속화된 엔티티 반환
-//    }
-//
 
 
     /**

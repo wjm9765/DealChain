@@ -33,9 +33,7 @@ import com.dealchain.dealchain.util.EncryptionUtil;
 @RestController
 @RequestMapping("/api/contracts")
 public class ContractController {
-    //    private final ChatPaser chatPaser;
-//    private final AICreateContract AICreateContract;
-//    private final ProductService productService;
+
     private final ChatRoomRepository chatRoomRepository;
     private final ContractService contractService;
     private final JsonToPdfService jsonToPdfService;
@@ -45,9 +43,6 @@ public class ContractController {
     private final EncryptionUtil encryptionUtil;
 
     public ContractController(ContractService contractService,
-                              //AICreateContract aiCreateContract,
-                              //ChatPaser chatPaser,
-                              //ProductService productService,
                               ChatRoomRepository chatRoomRepository,
                               JsonToPdfService jsonToPdfService,
                               MemberRepository memberRepository,
@@ -55,9 +50,6 @@ public class ContractController {
                               EncryptionUtil encryptionUtil
     ) {
         this.contractService = contractService;
-        //this.AICreateContract = aiCreateContract;
-        //this.chatPaser = chatPaser;
-        //this.productService = productService;
         this.chatRoomRepository = chatRoomRepository;
         this.jsonToPdfService = jsonToPdfService;
         this.memberRepository = memberRepository;
@@ -297,9 +289,7 @@ public class ContractController {
     }
 
     @GetMapping("/contractLists")
-    public ResponseEntity<?> getContractLists( // 반환 타입을 '?' (와일드카드)로 변경
-                                               //@RequestParam("roomId") String roomId,
-                                               @RequestHeader(value = "User-Agent", defaultValue = "Unknown") String deviceInfo) {
+    public ResponseEntity<?> getContractLists( @RequestHeader(value = "User-Agent", defaultValue = "Unknown") String deviceInfo) {
 
         try {
             List<ContractInfoResponseDto> contractList = contractService.getMyContracts();

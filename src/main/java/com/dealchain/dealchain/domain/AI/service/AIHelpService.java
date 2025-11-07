@@ -1,11 +1,10 @@
 package com.dealchain.dealchain.domain.AI.service;
 
-import com.dealchain.dealchain.domain.AI.dto.ContractDefaultReqeustDto; // 👈 [참고] 이 메서드에서 더 이상 사용되지 않음
 import jakarta.annotation.PostConstruct;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import org.slf4j.Logger; // 👈 [보안] 1. 표준 로거 Import
-import org.slf4j.LoggerFactory; // 👈 [보안] 2. 표준 로거 Import
+import org.slf4j.Logger; 
+import org.slf4j.LoggerFactory; 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
