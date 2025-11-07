@@ -91,7 +91,6 @@ public class FraudDetectionConsumer {
         processDtos(drainList);
     }
 
-
     private void processDtos(List<SQSrequestDto> parsedDtos) {
         Map<String, List<SQSrequestDto>> messagesByRoom = parsedDtos.stream()
                 .collect(Collectors.groupingBy(SQSrequestDto::getRoomId));
@@ -106,8 +105,14 @@ public class FraudDetectionConsumer {
                 // AI 사기 탐지 모델 호출
                 detectDto response = flaskApiService.sendPostRequest(chatLog);
 
+                // 응답 값 유효성 검사: null 응답, fraud_score 또는 message_id가 없으면 에러 출력하고 건너뜀
+                if (response == null || response.getFraud_score() == null || response.getMessage_id() == null) {
+                    log.error("AI 응답 유효하지 않음.");
+                    continue;
+                }
+
                 // 결과가 유효하고 임계값 초과 시 알림 처리
-                if (response != null && response.getFraud_score() != null && response.getFraud_score() >= threshold) {
+                if (response.getFraud_score() >= threshold) {
 
                     Optional<ChatRoom> chatRoomOpt = chatRoomRepository.findById(roomId);
                     if (chatRoomOpt.isEmpty()) {
@@ -123,19 +128,17 @@ public class FraudDetectionConsumer {
                     }
 
                     Long msgId = response.getMessage_id();
-                    if (msgId == null) {
-                        log.warn("AI 응답 message_id가 null 입니다. roomId={}", roomId);
-                    } else if (Objects.equals(msgId, seller)) {
+                    if (Objects.equals(msgId, seller)) {
                         try {
                             notificationService.sendNotification(msgId, seller, roomId,
-                                    "위험! 계약서 작성을 권고드립니다.", "WARNING_FRAUD", response.getReason());
+                                    "계약서 작성을 권고드립니다.", "WARNING_FRAUD", response.getReason());
                         } catch (Exception e) {
                             log.error("seller 알림 전송 실패. roomId={}, seller={}", roomId, seller, e);
                         }
                     } else if (Objects.equals(msgId, buyer)) {
                         try {
                             notificationService.sendNotification(msgId, buyer, roomId,
-                                    "위험! 계약서 작성을 권고드립니다.", "WARNING_FRAUD", response.getReason());
+                                    "계약서 작성을 권고드립니다.", "WARNING_FRAUD", response.getReason());
                         } catch (Exception e) {
                             log.error("buyer 알림 전송 실패. roomId={}, buyer={}", roomId, buyer, e);
                         }
@@ -144,8 +147,7 @@ public class FraudDetectionConsumer {
                                 roomId, msgId, seller, buyer);
                     }
                 } else {
-                    log.info("사기점수 미달 또는 응답 없음. RoomId={}, fraud_score={}", roomId,
-                            response == null ? null : response.getFraud_score());
+                    log.info("사기점수 미달. RoomId={}, fraud_score={}", roomId, response.getFraud_score());
                 }
 
             } catch (Exception e) {

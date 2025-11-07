@@ -14,11 +14,11 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 public class ApiService {
     private final WebClient flaskApiWebClient;
 
-    public detectDto sendPostRequest(String jsonBody) {
+    public detectDto sendPostRequest(String test) {
         try {
             detectDto responsed = flaskApiWebClient.post()
                     .uri("/detect_fraud")
-                    .bodyValue(jsonBody)
+                    .bodyValue(test)
                     .retrieve()
                     .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
                             response -> response.bodyToMono(String.class)

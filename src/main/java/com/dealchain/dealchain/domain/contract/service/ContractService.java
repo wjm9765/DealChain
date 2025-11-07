@@ -243,18 +243,6 @@ public class ContractService {
         ContractData contractData = contractDataRepository.findByRoomIdAndSellerIdAndBuyerId(roomId, sellerId, buyerId)
                 .orElseThrow(() -> new IllegalArgumentException("수정할 기존 계약서 데이터를 찾을 수 없습니다."));
 
-        String cleanjson = xssSanitizer.sanitizeToPlainText(requestDto.getEditjson());
-
-
-        String sellerName = memberRepository.findNameById(sellerId)
-                .orElseThrow(() -> new IllegalArgumentException("판매자 정보를 찾을 수 없습니다. sellerId=" + sellerId));
-        String buyerName = memberRepository.findNameById(buyerId)
-                .orElseThrow(() -> new IllegalArgumentException("구매자 정보를 찾을 수 없습니다. buyerId=" + buyerId));
-        ContractDefaultReqeustDto default_request = ContractDefaultReqeustDto.builder()
-                .seller_id(sellerId).buyer_id(buyerId)
-                .seller_name(sellerName).buyer_name(buyerName).product(product).build();
-
-
 
         // 새로운 계약서 내용을 암호화
         String encryptedJson;

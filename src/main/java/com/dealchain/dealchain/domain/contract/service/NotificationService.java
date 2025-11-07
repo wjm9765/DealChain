@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation; // Propagation 임포트
 
+import java.util.HashMap;
 import java.util.Map;
 
 @Service
@@ -34,11 +35,14 @@ public class NotificationService {
 
         // AIcontent = AI가 왜 그렇게 판단했는지 근거가 되는 json 형태
         try {
-            Map<String, String> notificationPayload = Map.of(
-                    "type", type,
-                    "message", message,
-                    "roomId", roomId
-            );
+            Map<String, String> notificationPayload = new HashMap<>();
+            notificationPayload.put("type", type);
+            notificationPayload.put("message", message);
+            notificationPayload.put("roomId", roomId);
+            // AI 근거(reason)가 유효하면 페이로드에 포함
+            if (AIcontent != null && !AIcontent.isBlank()) {
+                notificationPayload.put("reason", AIcontent);
+            }
             // 알림 전송
             messagingTemplate.convertAndSendToUser(
                     String.valueOf(who),
@@ -56,8 +60,11 @@ public class NotificationService {
 
             chatNotificationRepository.save(chatNotification);
 
-            log.info("(ID: {})에게 {}: {}  알림 전송 완료 (RoomId: {})", who, type, message, roomId);
-
+            if (AIcontent != null && !AIcontent.isBlank()) {
+                log.info("(ID: {})에게 {}: {} (reason present) 알림 전송 완료 (RoomId: {})", who, type, message, roomId);
+            } else {
+                log.info("(ID: {})에게 {}: {} 알림 전송 완료 (RoomId: {})", who, type, message, roomId);
+            }
         } catch (Exception e) {
             log.warn("WebSocket 알림 전송/저장 실패 (비동기): {}", e.getMessage());
         }
