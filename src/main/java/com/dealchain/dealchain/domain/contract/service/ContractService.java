@@ -457,7 +457,6 @@ public class ContractService {
         String reasonJson = aiCreateContract.invokeClaude(chatLog, default_request, aiContractJson);
 
 
-
         RationaleResponseDto rationaleResponseDto = rationaleJsonConverter.fromJson(reasonJson);
 
         // 거래 추적

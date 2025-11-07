@@ -516,7 +516,12 @@ public class ContractController {
 
         try {
             SignResponseDto responseDto = contractService.sendTobuyerService(requestDto, currentUserId);
-            return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(responseDto);
+
+            if (responseDto.isSuccess()) {
+                return ResponseEntity.ok(responseDto); // 200 OK
+            } else {
+                return ResponseEntity.badRequest().body(responseDto); // 400 Bad Request
+            }
 
         } catch (SecurityException e) {
             log.warn("FORBIDDEN: User {} tried to send contract for room {} without auth.", currentUserId, requestDto.getRoomId(), e);

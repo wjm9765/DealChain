@@ -21,7 +21,7 @@ public class RationaleResponseDto {
     @AllArgsConstructor
     @Getter
     @Setter
-    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonInclude(JsonInclude.Include.ALWAYS)
     public static class Rationale {
         private Reason reason;
 
@@ -30,7 +30,7 @@ public class RationaleResponseDto {
         @AllArgsConstructor
         @Getter
         @Setter
-        @JsonInclude(JsonInclude.Include.NON_NULL)
+        @JsonInclude(JsonInclude.Include.ALWAYS)
         public static class Reason {
             private String item_details;
             private String payment;
