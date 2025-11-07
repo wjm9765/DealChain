@@ -30,8 +30,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.dealchain.dealchain.util.EncryptionUtil;
 
-import javax.swing.text.html.Option;
-
 @RestController
 @RequestMapping("/api/contracts")
 public class ContractController {
@@ -594,6 +592,99 @@ public class ContractController {
                     .body(errorResponse);
         }
     }
+
+
+
+    @PostMapping("/summary")
+    public ResponseEntity<ContractSummaryDto> createContractSummary(
+            @RequestBody ContractCreateRequestDto requestDto) {
+
+        if (requestDto == null || requestDto.getRoomId() == null || requestDto.getRoomId().isEmpty()) {
+            ContractSummaryDto errorResponse = ContractSummaryDto.builder()
+                    .isSuccess(false).data(null).build();
+            return ResponseEntity.badRequest().body(errorResponse);
+        }
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        Long currentUserId = Long.valueOf(authentication.getName());
+
+        try {
+
+            ContractSummaryDto responseDto = contractService.summaryContract(
+                    requestDto,
+                    currentUserId
+            );
+
+            return ResponseEntity.ok(responseDto);
+
+        } catch (SecurityException e) {
+            log.warn("FORBIDDEN: User {} tried to create contract for room {} without auth.",
+                    currentUserId, requestDto.getRoomId(), e);
+            ContractSummaryDto errorResponse = ContractSummaryDto.builder()
+                    .isSuccess(false).data(e.getMessage()).build();
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(errorResponse);
+
+        } catch (IllegalArgumentException e) {
+            log.warn("BAD_REQUEST: User {} failed to create contract for room {}: {}",
+                    currentUserId, requestDto.getRoomId(), e.getMessage());
+            ContractSummaryDto errorResponse = ContractSummaryDto.builder()
+                    .isSuccess(false).data(e.getMessage()).build();
+            return ResponseEntity.badRequest().body(errorResponse);
+
+        } catch (Exception e) {
+            log.error("Failed to create contract from chat for roomId: {}", requestDto.getRoomId(), e);
+            ContractSummaryDto errorResponse = ContractSummaryDto.builder()
+                    .isSuccess(false).data(null).build();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(errorResponse);
+        }
+    }
+
+    @PostMapping("/reason")
+    public ResponseEntity<ContractReasonDto> createContractReason(
+            @RequestBody ContractCreateRequestDto requestDto) {
+
+        if (requestDto == null || requestDto.getRoomId() == null || requestDto.getRoomId().isEmpty()) {
+            ContractReasonDto errorResponse = ContractReasonDto.builder()
+                    .isSuccess(false).data(null).build();
+            return ResponseEntity.badRequest().body(errorResponse);
+        }
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        Long currentUserId = Long.valueOf(authentication.getName());
+
+        try {
+
+            ContractReasonDto responseDto = contractService.reasonContract(
+                    requestDto,
+                    currentUserId
+            );
+
+            return ResponseEntity.ok(responseDto);
+
+        } catch (SecurityException e) {
+            log.warn("FORBIDDEN: User {} tried to create contract for room {} without auth.",
+                    currentUserId, requestDto.getRoomId(), e);
+            ContractReasonDto errorResponse = ContractReasonDto.builder()
+                    .isSuccess(false).data(e.getMessage()).build();
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(errorResponse);
+
+        } catch (IllegalArgumentException e) {
+            log.warn("BAD_REQUEST: User {} failed to create contract for room {}: {}",
+                    currentUserId, requestDto.getRoomId(), e.getMessage());
+            ContractReasonDto errorResponse = ContractReasonDto.builder()
+                    .isSuccess(false).data(e.getMessage()).build();
+            return ResponseEntity.badRequest().body(errorResponse);
+
+        } catch (Exception e) {
+            log.error("Failed to create contract from chat for roomId: {}", requestDto.getRoomId(), e);
+            ContractReasonDto errorResponse = ContractReasonDto.builder()
+                    .isSuccess(false).data(null).build();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(errorResponse);
+        }
+    }
+
 
 }
 
