@@ -255,15 +255,6 @@ public class ContractService {
                 .seller_name(sellerName).buyer_name(buyerName).product(product).build();
 
 
-        String chatLog = chatPaser.buildSenderToContentsJsonByRoomId(roomId);
-        String reason = aiCreateContract.invokeClaude(chatLog,default_request,cleanjson);
-        //여기에 AI 계약서
-        String summary = getSummaryofContract(cleanjson);//요약 버전
-
-        com.dealchain.dealchain.domain.AI.dto.ContractResponseDto contractResponseDto = contractJsonConverter.fromJson(cleanjson);
-        RationaleResponseDto rationaleResponseDto = rationaleJsonConverter.fromJson(reason);
-
-
 
         // 새로운 계약서 내용을 암호화
         String encryptedJson;
@@ -283,15 +274,11 @@ public class ContractService {
                 requestDto.getDeviceInfo()
         );
 
-        //변경된 데이터 저장
+
         contractDataRepository.save(contractData);
-        // --- 5. [응답] ---
-        // 수정된 '새' 계약서와 '새' 요약본을 반환
+
         return ContractResponseDto.builder()
                 .isSuccess(true)
-                .contractResponseDto(contractResponseDto)
-                .rationaleResponseDto(rationaleResponseDto)
-                .summary(summary)
                 .build();
     }
 
@@ -484,7 +471,6 @@ public class ContractService {
         System.out.println(reasonJson);
 
         RationaleResponseDto rationaleResponseDto = rationaleJsonConverter.fromJson(reasonJson);
-
 
         // 거래 추적
         recordDealTrackingForCreate("REASON", roomId, sellerId, buyerId, requestDto.getDeviceInfo());

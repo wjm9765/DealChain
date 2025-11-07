@@ -12,22 +12,24 @@ public class RationaleJsonConverter {
 
     /**
      * JSON 문자열을 RationaleResponseDto로 변환
-     * 
-     * @param jsonString JSON 문자열
+     * * @param jsonString 원본 문자열 (텍스트가 섞여 있을 수 있음)
      * @return RationaleResponseDto 객체
      * @throws RuntimeException JSON 파싱 실패 시
      */
     public RationaleResponseDto fromJson(String jsonString) {
         try {
-            JSONObject json = new JSONObject(jsonString);
-            
+
+            String cleanJson = JsonExtractor.extractJsonBlock(jsonString);
+
+
+            JSONObject json = new JSONObject(cleanJson);
+
             RationaleResponseDto.RationaleResponseDtoBuilder builder = RationaleResponseDto.builder();
 
             // rationale 변환
             if (json.has("rationale") && !json.isNull("rationale")) {
                 JSONObject rationaleJson = json.getJSONObject("rationale");
                 RationaleResponseDto.Rationale.RationaleBuilder rationaleBuilder = RationaleResponseDto.Rationale.builder();
-
                 // reason 변환
                 if (rationaleJson.has("reason") && !rationaleJson.isNull("reason")) {
                     JSONObject reasonJson = rationaleJson.getJSONObject("reason");
@@ -50,24 +52,27 @@ public class RationaleJsonConverter {
             }
 
             return builder.build();
+        } catch (IllegalArgumentException e) {
+            // JSON 블록 추출 실패 시 예외 처리
+            throw new RuntimeException("JSON 블록 추출 실패: " + e.getMessage(), e);
         } catch (Exception e) {
-            throw new RuntimeException("JSON을 DTO로 변환 실패", e);
+            // DTO 변환 중 구조적 오류 발생 시 예외 처리
+            throw new RuntimeException("추출된 JSON을 DTO로 변환 실패", e);
         }
     }
 
     /**
-     * RationaleResponseDto를 JSON 문자열로 변환
-     * 
-     * @param dto RationaleResponseDto 객체
+     * RationaleResponseDto를 JSON 문자열로 변환 (기능 유지)
+     * * @param dto RationaleResponseDto 객체
      * @return JSON 문자열
      * @throws RuntimeException JSON 변환 실패 시
      */
     public String toJson(RationaleResponseDto dto) {
         try {
+            // 이 메서드는 DTO 객체를 입력받으므로, JSON 추출 로직이 필요 없습니다.
             return MAPPER.writeValueAsString(dto);
         } catch (Exception e) {
             throw new RuntimeException("DTO를 JSON으로 변환 실패", e);
         }
     }
 }
-

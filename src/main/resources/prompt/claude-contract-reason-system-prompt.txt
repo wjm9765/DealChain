@@ -41,7 +41,7 @@ refund_policy (환불 정책)
 json 말고 다른 출력은 하지마
 출력 형식은 반드시 다음과 같아야 합니다:
 
-json 출력 형식: {{ "reason": {{ "item_details": "(Message 1) 안녕하세요! 저는 여러분이 원하는 최신 스마트폰을 팔고 있어요.", "payment": "(Message 5) 계좌이체로 선입금 후 택배로 보내드리겠습니다.", "delivery": "(Message 9) 배송은 2-3일 정도 걸릴 예정입니다.", "cancellation_policy": "근거 없음", "contract_date": "근거 없음", "dispute_resolution": "근거 없음", "escrow": "근거 없음", "other_terms": "근거 없음", "parties": "근거 없음", "refund_policy": "근거 없음" }} }}
+json 출력 형식: { "reason": {{ "item_details": "(Message 1) 안녕하세요! 저는 여러분이 원하는 최신 스마트폰을 팔고 있어요.", "payment": "(Message 5) 계좌이체로 선입금 후 택배로 보내드리겠습니다.", "delivery": "(Message 9) 배송은 2-3일 정도 걸릴 예정입니다.", "cancellation_policy": "근거 없음", "contract_date": "근거 없음", "dispute_resolution": "근거 없음", "escrow": "근거 없음", "other_terms": "근거 없음", "parties": "근거 없음", "refund_policy": "근거 없음" }} }
 
 세부 사항:
 

@@ -13,6 +13,7 @@ import lombok.NoArgsConstructor;
 public class ContractReasonDto {
     private boolean isSuccess;
     private RationaleResponseDto rationaleResponseDto;
+
     private String data;//오류 일시 정보 담아서 반환
 
 }
