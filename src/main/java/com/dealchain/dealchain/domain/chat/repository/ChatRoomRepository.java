@@ -12,7 +12,8 @@ import java.util.Optional;
 public interface ChatRoomRepository extends JpaRepository<ChatRoom, String> {
     // java
     List<ChatRoom> findBySellerIdOrBuyerId(Long sellerId, Long buyerId);
-    Optional<ChatRoom> findBySellerIdAndBuyerId(Long sellerId, Long buyerId);
+    //Optional<ChatRoom> findBySellerIdAndBuyerId(Long sellerId, Long buyerId);
+    Optional<ChatRoom> findBySellerIdAndBuyerIdAndProductId(Long sellerId, Long buyerId,Long productId);
 
     @Query("select c.productId from ChatRoom c where c.roomId = :roomId")
     Optional<Long> findProductIdByRoomId(String roomId);

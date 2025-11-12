@@ -3,14 +3,14 @@ package com.dealchain.dealchain.domain.contract.service;
 
 import java.io.UnsupportedEncodingException;
 import com.dealchain.dealchain.domain.AI.dto.ContractDefaultReqeustDto;
+import com.dealchain.dealchain.domain.AI.dto.RationaleResponseDto;
+import com.dealchain.dealchain.domain.AI.service.*;
 import com.dealchain.dealchain.domain.contract.dto.*;
 import com.dealchain.dealchain.domain.contract.repository.ContractDataRepository;
 import com.dealchain.dealchain.domain.member.MemberRepository;
 import com.dealchain.dealchain.domain.security.ContractEncryptionException;
+import com.dealchain.dealchain.domain.security.XssSanitizer;
 import com.dealchain.dealchain.util.EncryptionUtil;
-import com.dealchain.dealchain.domain.AI.service.AICreateContract;
-import com.dealchain.dealchain.domain.AI.service.AIHelpService;
-import com.dealchain.dealchain.domain.AI.service.ChatPaser;
 import com.dealchain.dealchain.domain.DealTracking.dto.DealTrackingRequest;
 import com.dealchain.dealchain.domain.DealTracking.service.DealTrackingService;
 import com.dealchain.dealchain.domain.chat.entity.ChatRoom;
@@ -44,9 +44,6 @@ import java.util.Optional;
 public class ContractService {
     private static final Logger log = LoggerFactory.getLogger(ContractService.class);
 
-    //@Autowired
-    //private SimpMessagingTemplate messagingTemplate;//알림을 위한 의존성
-
     private final SignTableService signTableService;
     private final ContractRepository contractRepository;
     private final S3UploadService s3UploadService;
@@ -63,22 +60,28 @@ public class ContractService {
     private final ObjectMapper objectMapper;
     private final MemberRepository memberRepository;
     private final NotificationService notificationService;
+    private final ContractJsonConverter contractJsonConverter;
+    private final RationaleJsonConverter rationaleJsonConverter;
+    private final XssSanitizer xssSanitizer;
 
-    public ContractService(ContractRepository contractRepository, 
-                          S3UploadService s3UploadService,
-                          HashService hashService,
-                          EncryptionUtil encryptionUtil,
-                          DealTrackingService dealTrackingService,
-                          SignRepository signRepository,
-                          ChatRoomRepository chatRoomRepository,
+    public ContractService(ContractRepository contractRepository,
+                           S3UploadService s3UploadService,
+                           HashService hashService,
+                           EncryptionUtil encryptionUtil,
+                           DealTrackingService dealTrackingService,
+                           SignRepository signRepository,
+                           ChatRoomRepository chatRoomRepository,
                            ChatPaser chatPaser,
                            AICreateContract aiCreateContract,
-                            ProductService productService,
+                           ProductService productService,
                            ContractDataRepository contractDataRepository,
                            MemberRepository memberRepository,
                            ObjectMapper objectMapper,
                            NotificationService notificationService,
                            SignTableService signTableService,
+                           ContractJsonConverter contractJsonConverter,
+                           RationaleJsonConverter rationaleJsonConverter,
+                           XssSanitizer xssSanitizer,
                            AIHelpService aiHelpService) {
         this.contractRepository = contractRepository;
         this.s3UploadService = s3UploadService;
@@ -96,6 +99,9 @@ public class ContractService {
         this.memberRepository = memberRepository;
         this.notificationService = notificationService;
         this.signTableService = signTableService;
+        this.contractJsonConverter = contractJsonConverter;
+        this.rationaleJsonConverter = rationaleJsonConverter;
+        this.xssSanitizer =xssSanitizer;
     }
 
     public String getSummaryofContract(String contract){
@@ -235,10 +241,6 @@ public class ContractService {
                 .orElseThrow(() -> new IllegalArgumentException("수정할 기존 계약서 데이터를 찾을 수 없습니다."));
 
 
-        // 2b. 요약본 생성
-        String newSummary = getSummaryofContract(requestDto.getEditjson());
-
-
         // 새로운 계약서 내용을 암호화
         String encryptedJson;
         try {
@@ -257,14 +259,11 @@ public class ContractService {
                 requestDto.getDeviceInfo()
         );
 
-        //변경된 데이터 저장
+
         contractDataRepository.save(contractData);
-        // --- 5. [응답] ---
-        // 수정된 '새' 계약서와 '새' 요약본을 반환
+
         return ContractResponseDto.builder()
                 .isSuccess(true)
-                .data(requestDto.getEditjson())
-                .summary(newSummary)
                 .build();
     }
 
@@ -294,13 +293,13 @@ public class ContractService {
                     sellerId,
                     buyerId,
                     roomId,
-                     "계약서 검토 요청이 있습니다.",
+                    "계약서 검토 요청이 있습니다.",
                     "CONTRACT_REQUEST",
                     null
             );//구매자에게 알림 전송
             return ContractResponseDto.builder()
                     .isSuccess(true)
-                    .data("계약서 생성 요청을 판매자에게 보냈습니다.")
+                    .data("구매자에게 계약서 요청을 보냈습니다.")
                     .summary(null)
                     .build();
         }
@@ -320,8 +319,8 @@ public class ContractService {
                 .seller_name(sellerName).buyer_name(buyerName).product(product).build();
 
 
-        String aiContractJson = aiCreateContract.invokeClaude(chatLog, default_request);
-        String summary = getSummaryofContract(aiContractJson);//요약 버전
+        String aiContractJson = aiCreateContract.invokeClaude(chatLog, default_request,null);
+        com.dealchain.dealchain.domain.AI.dto.ContractResponseDto contractResponseDto = contractJsonConverter.fromJson(aiContractJson);
 
         // --- 3. [DB 저장] (Transaction) ---
 
@@ -352,121 +351,142 @@ public class ContractService {
         if (isCallerSeller) {//판매자가 생성을 요청했을 시
             return ContractResponseDto.builder()
                     .isSuccess(true)
-                    .data(aiContractJson)
-                    .summary(summary)
+                    .contractResponseDto(contractResponseDto)
                     .build();
-
         }
         else{
             throw new SecurityException("알 수 없는 에러 발생");
         }
     }
-//
-//    //판매자가 서명 완료하고 구매자한테 서명 요청하는것
-//    @Async
-//    public void sendSignContractRequestNotification(Long sellerId, String roomId, Long buyerId) {
-//        try {
-//            Map<String, String> notificationPayload = Map.of(
-//                    "type", "CONTRACT_REQUEST",
-//                    "message", " 계약서 서명 요청이 있습니다.",
-//                    "roomId", roomId
-//            );
-//            // [핵심] '판매자'의 '개인 알림 채널'로 메시지 전송
-//            messagingTemplate.convertAndSendToUser(
-//                    String.valueOf(buyerId),
-//                    "/queue/notifications",
-//                    notificationPayload
-//            );
-//
-//            log.info("판매자(ID: {})에게 계약서 서명 요청 알림 전송 완료 (RoomId: {})", sellerId, roomId);
-//
-//        } catch (Exception e) {
-//            log.warn("WebSocket 알림 전송 실패 (계약서 생성은 성공함): {}", e.getMessage());
-//        }
-//    }
-//
-//    //구매자가 계약서 생성 요청을 날림
-//    @Async
-//    public void sendContractRequestNotification(Long sellerId, String roomId, Long buyerId,String message) {
-//        try {
-//            Map<String, String> notificationPayload = Map.of(
-//                    "type", "CONTRACT_REQUEST",
-//                    "message", message,
-//                    "roomId", roomId
-//            );
-//            // [핵심] '판매자'의 '개인 알림 채널'로 메시지 전송
-//            messagingTemplate.convertAndSendToUser(
-//                    String.valueOf(sellerId),
-//                    "/queue/notifications",
-//                    notificationPayload
-//            );
-//
-//            log.info("판매자(ID: {})에게 계약서 검토 요청 알림 전송 완료 (RoomId: {})", sellerId, roomId);
-//
-//        } catch (Exception e) {
-//            log.warn("WebSocket 알림 전송 실패 (계약서 생성은 성공함): {}", e.getMessage());
-//        }
-//    }
-//
-//    //개인 알림 채널로 보냄
-//    //위의 두개를 이걸로 통합할 것
-//    @Async
-//    @Transactional
-//    public void sendNotification(Long who,Long sender, String roomId,String message,String type,String AIcontent) {
-//
-//        //AIcontent = AI가 왜 그렇게 판단했는지 근거가 되는 json 형태
-//        try {
-//            Map<String, String> notificationPayload = Map.of(
-//                    "type", type,
-//                    "message", message,
-//                    "roomId", roomId
-//            );
-//            //알림 전송
-//            messagingTemplate.convertAndSendToUser(
-//                    String.valueOf(who),
-//                    "/queue/notifications",
-//                    notificationPayload
-//            );
-//
-//            ChatNotification chatNotification = ChatNotification.builder()
-//                    .memberId(who)
-//                    .senderId(sender)
-//                    .roomId(roomId)
-//                    .type(ChatNotification.NotificationType.valueOf(type))
-//                    .AIContent(AIcontent)
-//                    .build();
-//
-//            chatNotificationRepository.save(chatNotification);
-//
-//            log.info("(ID: {})에게 {}: {}  알림 전송 완료 (RoomId: {})", who,type,message, roomId);
-//
-//        } catch (Exception e) {
-//            log.warn("WebSocket 알림 전송 실패: {}", e.getMessage());
-//        }
-//    }
 
-//    /**
-//     * 계약서 생성 시 초기 서명 테이블 생성 (중복 방지)
-//     */
-//    @Transactional
-//    public SignTable createInitialSignIfNotExists(String roomId, Product product) {
-//        if (product == null) {
-//            throw new IllegalArgumentException("Product가 필요합니다.");
-//        }
-//        // 중복 방지
-//        Optional<SignTable> existing = signRepository.findByRoomIdAndProductId(roomId, product.getId());
-//        if (existing.isPresent()) {
-//            return existing.get(); // 이미 있으면 기존 객체 반환
-//        }
-//
-//        SignTable signTable = SignTable.builder()
-//                .roomId(roomId)
-//                .productId(product.getId())
-//                .build();
-//
-//        return signRepository.save(signTable); // 저장 후 영속화된 엔티티 반환
-//    }
-//
+    @Transactional
+    public ContractSummaryDto summaryContract(ContractCreateRequestDto requestDto, Long currentUserId) {
+        String roomId = requestDto.getRoomId();
+        Optional<Long> productIdOpt = chatRoomRepository.findProductIdByRoomId(roomId);
+        Long productId = productIdOpt.orElseThrow(
+                () -> new IllegalArgumentException("해당 roomId에 대한 productId가 없습니다. roomId=" + roomId)
+        );
+        Product product = productService.findById(productId);
+
+        Long sellerId = product.getMemberId();
+        Long buyerId = chatRoomRepository.findBuyerIdByRoomId(roomId)
+                .orElseThrow(() -> new IllegalArgumentException("해당 roomId에 대한 buyerId가 없습니다. roomId=" + roomId));
+
+        boolean isCallerSeller = currentUserId.equals(sellerId);
+        boolean isCallerBuyer = currentUserId.equals(buyerId);
+
+        if (!isCallerSeller && !isCallerBuyer) {
+            throw new SecurityException("당신은 이 거래의 당사자가 아닙니다.");
+        }
+
+        // 작성 중인 ContractData를 찾아 복호화
+        String aiContractJson = loadDecryptedContractJsonByIds(roomId, sellerId, buyerId);
+        if (aiContractJson == null) {
+            return ContractSummaryDto.builder()
+                    .isSuccess(false)
+                    .data("복호화된 계약서가 존재하지 않습니다.")
+                    .summary(null)
+                    .build();
+        }
+
+        String summary = getSummaryofContract(aiContractJson);
+
+
+        // 거래 추적 및 서명 테이블 초기화(읽기성 작업)
+        recordDealTrackingForCreate("SUMMARY", roomId, sellerId, buyerId, requestDto.getDeviceInfo());
+
+        // 반환: ContractSummaryDto 형식으로 모든 응답 통일 (data에 contract + rationale 포함)
+
+
+        return ContractSummaryDto.builder()
+                .isSuccess(true)
+                .summary(summary)
+                .build();
+    }
+
+
+    @Transactional
+    public ContractReasonDto reasonContract(ContractCreateRequestDto requestDto, Long currentUserId) {
+        String roomId = requestDto.getRoomId();
+        Optional<Long> productIdOpt = chatRoomRepository.findProductIdByRoomId(roomId);
+        Long productId = productIdOpt.orElseThrow(
+                () -> new IllegalArgumentException("해당 roomId에 대한 productId가 없습니다. roomId=" + roomId)
+        );
+        Product product = productService.findById(productId);
+
+        Long sellerId = product.getMemberId();
+        Long buyerId = chatRoomRepository.findBuyerIdByRoomId(roomId)
+                .orElseThrow(() -> new IllegalArgumentException("해당 roomId에 대한 buyerId가 없습니다. roomId=" + roomId));
+
+        boolean isCallerSeller = currentUserId.equals(sellerId);
+        boolean isCallerBuyer = currentUserId.equals(buyerId);
+
+        if (!isCallerSeller && !isCallerBuyer) {
+            throw new SecurityException("당신은 이 거래의 당사자가 아닙니다.");
+        }
+
+        // 작성 중인 ContractData를 찾아 복호화
+        String aiContractJson = loadDecryptedContractJsonByIds(roomId, sellerId, buyerId);
+        if (aiContractJson == null) {
+            return ContractReasonDto.builder()
+                    .isSuccess(false)
+                    .data("복호화된 계약서가 존재하지 않습니다.")
+                    .build();
+        }
+
+        // 채팅 로그 및 기본 요청 DTO 생성
+        String chatLog = chatPaser.buildSenderToContentsJsonByRoomId(roomId);
+
+        String sellerName = memberRepository.findNameById(sellerId)
+                .orElseThrow(() -> new IllegalArgumentException("판매자 정보를 찾을 수 없습니다. sellerId=" + sellerId));
+        String buyerName = memberRepository.findNameById(buyerId)
+                .orElseThrow(() -> new IllegalArgumentException("구매자 정보를 찾을 수 없습니다. buyerId=" + buyerId));
+
+        ContractDefaultReqeustDto default_request = ContractDefaultReqeustDto.builder()
+                .seller_id(sellerId)
+                .buyer_id(buyerId)
+                .seller_name(sellerName)
+                .buyer_name(buyerName)
+                .product(product)
+                .build();
+
+        // AI 호출 및 변환
+        String reasonJson = aiCreateContract.invokeClaude(chatLog, default_request, aiContractJson);
+
+
+        RationaleResponseDto rationaleResponseDto = rationaleJsonConverter.fromJson(reasonJson);
+
+        // 거래 추적
+        recordDealTrackingForCreate("REASON", roomId, sellerId, buyerId, requestDto.getDeviceInfo());
+
+        // 모든 응답을 ContractReasonDto 형식으로 반환
+        return ContractReasonDto.builder()
+                .isSuccess(true)
+                .data(null)
+                .rationaleResponseDto(rationaleResponseDto)
+                .build();
+    }
+
+
+    @Transactional(readOnly = true)
+    public String loadDecryptedContractJsonByIds(String roomId, Long sellerId, Long buyerId) {
+        ContractData contractData = contractDataRepository
+                .findByRoomIdAndSellerIdAndBuyerId(roomId, sellerId, buyerId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "해당 조건의 계약서 데이터를 찾을 수 없습니다. roomId=" + roomId
+                                + " sellerId=" + sellerId + " buyerId=" + buyerId));
+
+        try {
+            String decrypted = encryptionUtil.decryptString(contractData.getContractJsonData());
+            if (decrypted == null) {
+                throw new IllegalStateException("복호화 결과가 null입니다. ContractData id=" + contractData.getId());
+            }
+            return decrypted;
+        } catch (Exception e) {
+            log.error("계약서 복호화 실패: roomId={}, sellerId={}, buyerId={}", roomId, sellerId, buyerId, e);
+            throw new RuntimeException("계약서 복호화 중 오류가 발생했습니다.", e);
+        }
+    }
 
 
     /**
@@ -699,7 +719,7 @@ public class ContractService {
      * @param buyerId    구매자 ID
      * @param deviceInfo 요청 디바이스 정보
      */
-     public void recordDealTrackingForCreate(String type, String roomId, Long sellerId, Long buyerId, String deviceInfo) {
+    public void recordDealTrackingForCreate(String type, String roomId, Long sellerId, Long buyerId, String deviceInfo) {
         try {
             // 인증 정보 확인
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -950,4 +970,3 @@ public class ContractService {
         }
     }
 }
-

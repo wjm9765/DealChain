@@ -1,6 +1,7 @@
 package com.dealchain.dealchain.domain.contract;
 
 
+import com.dealchain.dealchain.domain.AI.service.ContractJsonConverter;
 import com.dealchain.dealchain.domain.chat.entity.ChatRoom;
 import com.dealchain.dealchain.domain.chat.repository.ChatRoomRepository;
 import com.dealchain.dealchain.domain.contract.dto.*;
@@ -14,10 +15,7 @@ import com.dealchain.dealchain.domain.member.Member;
 import com.dealchain.dealchain.domain.member.MemberRepository;
 import com.dealchain.dealchain.util.ByteArrayMultipartFile;
 import jakarta.validation.Valid;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
@@ -30,14 +28,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.dealchain.dealchain.util.EncryptionUtil;
 
-import javax.swing.text.html.Option;
-
 @RestController
 @RequestMapping("/api/contracts")
 public class ContractController {
-    //    private final ChatPaser chatPaser;
-//    private final AICreateContract AICreateContract;
-//    private final ProductService productService;
+
     private final ChatRoomRepository chatRoomRepository;
     private final ContractService contractService;
     private final JsonToPdfService jsonToPdfService;
@@ -45,26 +39,23 @@ public class ContractController {
     private final ContractDataRepository contractDataRepository;
     private static final Logger log = LoggerFactory.getLogger(ContractController.class);
     private final EncryptionUtil encryptionUtil;
+    private final ContractJsonConverter contractJsonConverter;
 
     public ContractController(ContractService contractService,
-                              //AICreateContract aiCreateContract,
-                              //ChatPaser chatPaser,
-                              //ProductService productService,
                               ChatRoomRepository chatRoomRepository,
                               JsonToPdfService jsonToPdfService,
                               MemberRepository memberRepository,
                               ContractDataRepository contractDataRepository,
-                              EncryptionUtil encryptionUtil
+                              EncryptionUtil encryptionUtil,
+                              ContractJsonConverter contractJsonConverter
     ) {
         this.contractService = contractService;
-        //this.AICreateContract = aiCreateContract;
-        //this.chatPaser = chatPaser;
-        //this.productService = productService;
         this.chatRoomRepository = chatRoomRepository;
         this.jsonToPdfService = jsonToPdfService;
         this.memberRepository = memberRepository;
         this.contractDataRepository = contractDataRepository;
         this.encryptionUtil = encryptionUtil;
+        this.contractJsonConverter = contractJsonConverter;
     }
 
 
@@ -299,9 +290,7 @@ public class ContractController {
     }
 
     @GetMapping("/contractLists")
-    public ResponseEntity<?> getContractLists( // 반환 타입을 '?' (와일드카드)로 변경
-                                               //@RequestParam("roomId") String roomId,
-                                               @RequestHeader(value = "User-Agent", defaultValue = "Unknown") String deviceInfo) {
+    public ResponseEntity<?> getContractLists( @RequestHeader(value = "User-Agent", defaultValue = "Unknown") String deviceInfo) {
 
         try {
             List<ContractInfoResponseDto> contractList = contractService.getMyContracts();
@@ -328,42 +317,114 @@ public class ContractController {
         }
     }
     //계약서 상세 조회
+//    @GetMapping("/detail")
+//    public ResponseEntity<?> getContractDetailByRoomId(
+//            @RequestParam("roomId") String roomId,
+//            @RequestHeader(value = "User-Agent", defaultValue = "Unknown") String deviceInfo) {
+//
+//        try {
+//            // 1. [호출] roomId로 통합 서비스 호출
+//            ContractService.GetContractResponse response = contractService.getContractByRoomId(roomId, deviceInfo);
+//
+//            // 2. [분기] 서비스가 반환한 DTO의 contentType을 확인
+//            if ("application/pdf".equals(response.getContentType())) {
+//                // [PDF 응답]
+//                HttpHeaders headers = new HttpHeaders();
+//                headers.setContentType(MediaType.APPLICATION_PDF);
+//                // "inline"은 브라우저에서 바로 열기, "attachment"는 다운로드
+//                headers.setContentDispositionFormData("inline", "contract_" + roomId + ".pdf");
+//                return ResponseEntity.ok()
+//                        .headers(headers)
+//                        .body(response.getPdfBytes());
+//            } else {
+//                //아직 서명이 완료 안되었을 때 ContractResponeDto로 반환
+//                String contractJson = response.getContractData();
+//                com.dealchain.dealchain.domain.AI.dto.ContractResponseDto dto =
+//                        contractJson == null
+//                                ? new com.dealchain.dealchain.domain.AI.dto.ContractResponseDto()
+//                                : contractJsonConverter.fromJson(contractJson);
+//                return ResponseEntity.ok()
+//                        .contentType(MediaType.APPLICATION_JSON)
+//                        .body(dto);
+//
+//            }
+//
+//        } catch (SecurityException e) {
+//            // [인가 실패]
+//            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getMessage());
+//        } catch (IllegalArgumentException | IllegalStateException e) {
+//            // [데이터 오류] (e.g., roomId 없음, 계약서 없음)
+//            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
+//        } catch (Exception e) {
+//            // [서버 내부 오류] (e.g., 복호화 실패, S3 실패)
+//            log.error("계약서 상세 조회 중 알 수 없는 오류 발생 (RoomId: {})", roomId, e);
+//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("서버 오류가 발생했습니다.");
+//        }
+//    }
     @GetMapping("/detail")
-    public ResponseEntity<?> getContractDetailByRoomId(
+    public ResponseEntity<com.dealchain.dealchain.domain.AI.dto.ContractResponseDto> getContractDetailByRoomId(
             @RequestParam("roomId") String roomId,
             @RequestHeader(value = "User-Agent", defaultValue = "Unknown") String deviceInfo) {
 
         try {
-            // 1. [호출] roomId로 통합 서비스 호출
-            ContractService.GetContractResponse response = contractService.getContractByRoomId(roomId, deviceInfo);
-
-            // 2. [분기] 서비스가 반환한 DTO의 contentType을 확인
-            if ("application/pdf".equals(response.getContentType())) {
-                // [PDF 응답]
-                HttpHeaders headers = new HttpHeaders();
-                headers.setContentType(MediaType.APPLICATION_PDF);
-                // "inline"은 브라우저에서 바로 열기, "attachment"는 다운로드
-                headers.setContentDispositionFormData("inline", "contract_" + roomId + ".pdf");
-                return ResponseEntity.ok()
-                        .headers(headers)
-                        .body(response.getPdfBytes());
-            } else {
-                // [JSON 응답] (복호화된 JSON 문자열)
-                return ResponseEntity.ok()
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .body(response.getContractData());
+            // 인증 유지
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth == null || !auth.isAuthenticated()) {
+                return ResponseEntity.status(401).body(new com.dealchain.dealchain.domain.AI.dto.ContractResponseDto());
             }
 
+            // 서비스 호출
+            ContractService.GetContractResponse response = contractService.getContractByRoomId(roomId, deviceInfo);
+            String contractJson = response.getContractData();
+
+            com.dealchain.dealchain.domain.AI.dto.ContractResponseDto dto = contractJson == null
+                    ? new com.dealchain.dealchain.domain.AI.dto.ContractResponseDto()
+                    : contractJsonConverter.fromJson(contractJson);
+
+            return ResponseEntity.ok()
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(dto);
+
         } catch (SecurityException e) {
-            // [인가 실패]
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getMessage());
+            return ResponseEntity.status(403).body(com.dealchain.dealchain.domain.AI.dto.ContractResponseDto.builder().build());
         } catch (IllegalArgumentException | IllegalStateException e) {
-            // [데이터 오류] (e.g., roomId 없음, 계약서 없음)
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
+            return ResponseEntity.status(404).body(com.dealchain.dealchain.domain.AI.dto.ContractResponseDto.builder().build());
         } catch (Exception e) {
-            // [서버 내부 오류] (e.g., 복호화 실패, S3 실패)
             log.error("계약서 상세 조회 중 알 수 없는 오류 발생 (RoomId: {})", roomId, e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("서버 오류가 발생했습니다.");
+            return ResponseEntity.status(500).body(com.dealchain.dealchain.domain.AI.dto.ContractResponseDto.builder().build());
+        }
+    }
+
+    @GetMapping("/detail_pdf")
+    public ResponseEntity<byte[]> getContractPdfByRoomId(
+            @RequestParam("roomId") String roomId,
+            @RequestHeader(value = "User-Agent", defaultValue = "Unknown") String deviceInfo) {
+
+        try {
+            // 인증 유지
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth == null || !auth.isAuthenticated()) {
+                return ResponseEntity.status(401).body(new byte[0]);
+            }
+
+            ContractService.GetContractResponse response = contractService.getContractByRoomId(roomId, deviceInfo);
+            byte[] pdfBytes = response.getPdfBytes();
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_PDF);
+            headers.setContentDisposition(ContentDisposition.inline().filename("contract_" + roomId + ".pdf").build());
+
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(pdfBytes);
+
+        } catch (SecurityException e) {
+            return ResponseEntity.status(403).body(new byte[0]);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.status(404).body(new byte[0]);
+        } catch (Exception e) {
+            log.error("계약서 PDF 조회 중 알 수 없는 오류 발생 (RoomId: {})", roomId, e);
+            return ResponseEntity.status(500).body(new byte[0]);
         }
     }
 
@@ -518,7 +579,12 @@ public class ContractController {
 
         try {
             SignResponseDto responseDto = contractService.sendTobuyerService(requestDto, currentUserId);
-            return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(responseDto);
+
+            if (responseDto.isSuccess()) {
+                return ResponseEntity.ok(responseDto); // 200 OK
+            } else {
+                return ResponseEntity.badRequest().body(responseDto); // 400 Bad Request
+            }
 
         } catch (SecurityException e) {
             log.warn("FORBIDDEN: User {} tried to send contract for room {} without auth.", currentUserId, requestDto.getRoomId(), e);
@@ -594,6 +660,99 @@ public class ContractController {
                     .body(errorResponse);
         }
     }
+
+
+
+    @PostMapping("/summary")
+    public ResponseEntity<ContractSummaryDto> createContractSummary(
+            @RequestBody ContractCreateRequestDto requestDto) {
+
+        if (requestDto == null || requestDto.getRoomId() == null || requestDto.getRoomId().isEmpty()) {
+            ContractSummaryDto errorResponse = ContractSummaryDto.builder()
+                    .isSuccess(false).data(null).build();
+            return ResponseEntity.badRequest().body(errorResponse);
+        }
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        Long currentUserId = Long.valueOf(authentication.getName());
+
+        try {
+
+            ContractSummaryDto responseDto = contractService.summaryContract(
+                    requestDto,
+                    currentUserId
+            );
+
+            return ResponseEntity.ok(responseDto);
+
+        } catch (SecurityException e) {
+            log.warn("FORBIDDEN: User {} tried to create contract for room {} without auth.",
+                    currentUserId, requestDto.getRoomId(), e);
+            ContractSummaryDto errorResponse = ContractSummaryDto.builder()
+                    .isSuccess(false).data(e.getMessage()).build();
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(errorResponse);
+
+        } catch (IllegalArgumentException e) {
+            log.warn("BAD_REQUEST: User {} failed to create contract for room {}: {}",
+                    currentUserId, requestDto.getRoomId(), e.getMessage());
+            ContractSummaryDto errorResponse = ContractSummaryDto.builder()
+                    .isSuccess(false).data(e.getMessage()).build();
+            return ResponseEntity.badRequest().body(errorResponse);
+
+        } catch (Exception e) {
+            log.error("Failed to create contract from chat for roomId: {}", requestDto.getRoomId(), e);
+            ContractSummaryDto errorResponse = ContractSummaryDto.builder()
+                    .isSuccess(false).data(null).build();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(errorResponse);
+        }
+    }
+
+    @PostMapping("/reason")
+    public ResponseEntity<ContractReasonDto> createContractReason(
+            @RequestBody ContractCreateRequestDto requestDto) {
+
+        if (requestDto == null || requestDto.getRoomId() == null || requestDto.getRoomId().isEmpty()) {
+            ContractReasonDto errorResponse = ContractReasonDto.builder()
+                    .isSuccess(false).data(null).build();
+            return ResponseEntity.badRequest().body(errorResponse);
+        }
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        Long currentUserId = Long.valueOf(authentication.getName());
+
+        try {
+
+            ContractReasonDto responseDto = contractService.reasonContract(
+                    requestDto,
+                    currentUserId
+            );
+
+            return ResponseEntity.ok(responseDto);
+
+        } catch (SecurityException e) {
+            log.warn("FORBIDDEN: User {} tried to create contract for room {} without auth.",
+                    currentUserId, requestDto.getRoomId(), e);
+            ContractReasonDto errorResponse = ContractReasonDto.builder()
+                    .isSuccess(false).data(e.getMessage()).build();
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(errorResponse);
+
+        } catch (IllegalArgumentException e) {
+            log.warn("BAD_REQUEST: User {} failed to create contract for room {}: {}",
+                    currentUserId, requestDto.getRoomId(), e.getMessage());
+            ContractReasonDto errorResponse = ContractReasonDto.builder()
+                    .isSuccess(false).data(e.getMessage()).build();
+            return ResponseEntity.badRequest().body(errorResponse);
+
+        } catch (Exception e) {
+            log.error("Failed to create contract from chat for roomId: {}", requestDto.getRoomId(), e);
+            ContractReasonDto errorResponse = ContractReasonDto.builder()
+                    .isSuccess(false).data(null).build();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(errorResponse);
+        }
+    }
+
 
 }
 

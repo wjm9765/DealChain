@@ -49,7 +49,7 @@ public class APIChatService {
         }
         //중복 방지
 
-        Optional<ChatRoom> existingRoomOpt = chatRoomRepository.findBySellerIdAndBuyerId(requestDto.getSeller(), requestDto.getBuyer());
+        Optional<ChatRoom> existingRoomOpt = chatRoomRepository.findBySellerIdAndBuyerIdAndProductId(requestDto.getSeller(), requestDto.getBuyer(),requestDto.getProductId());
         if(existingRoomOpt.isPresent()){
             ChatRoom existingRoom = existingRoomOpt.get();
             return new ChatRoomResponseDto(existingRoom.getRoomId(),false,"이미 존재하는 채팅방입니다.");
@@ -84,7 +84,7 @@ public class APIChatService {
             return new ChatMessageRessponseDto(null, null, false);
         }
         // seller/buyer로 채팅방 조회
-        Optional<ChatRoom> existingRoomOpt = chatRoomRepository.findBySellerIdAndBuyerId(requestDto.getSeller(), requestDto.getBuyer());
+        Optional<ChatRoom> existingRoomOpt = chatRoomRepository.findById(requestDto.getRoomId());
         if (existingRoomOpt.isEmpty()) {
             return new ChatMessageRessponseDto(null, null, false);
         }
@@ -121,11 +121,15 @@ public class APIChatService {
         if(authentication == null || authentication.getName() == null){
             return new ChatRoomListResponseDto(null,false,"토큰이 존재하지 않습니다.");
         }
+
         String authName = authentication.getName();
-        if(!authName.equals(userId)){
-            return new ChatRoomListResponseDto(null,false,
-                    "토큰의 사용자 ID가 요청과 일치하지 않습니다: ");
+        long authId = Long.parseLong(authName);
+        if (userId == null || userId.longValue() != authId) {
+            return new ChatRoomListResponseDto(null, false,
+                    "토큰의 사용자 ID가 요청과 일치하지 않습니다: " + authName);
         }
+
+
         //중복 방지
 
         List<ChatRoom> rooms = chatRoomRepository.findBySellerIdOrBuyerId(userId, userId);

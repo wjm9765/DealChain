@@ -67,7 +67,7 @@ public class WebChatService {
         // 3. Principal(토큰)과 senderId 일치 여부 확인
         Long principalId = Long.valueOf(principal.getName());
         if (principal == null || !messageDto.getSenderId().equals(principalId)) {
-            throw new EntityNotFoundException("토큰의 사용자와 senderId가 일치하지 않습니다."+principalId);
+            throw new EntityNotFoundException("토큰의 사용자와 senderId가 일치하지 않습니다."+principalId+" "+messageDto.getSenderId());
         }
 
         Long seller = chatRoom.getSellerId();

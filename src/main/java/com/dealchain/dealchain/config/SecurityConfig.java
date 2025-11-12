@@ -32,7 +32,6 @@ public class SecurityConfig {
 
                     //나중에 삭제 필요
                     config.setAllowedOriginPatterns(List.of("http://localhost:*"));
-                    config.setAllowedOriginPatterns(List.of("http://127.0.0.1:*"));
 
 
                     config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
@@ -44,7 +43,7 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-                )                //.anonymous(anonymous -> anonymous.disable())
+                )               
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((request, response, authException) -> {
                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
@@ -56,16 +55,16 @@ public class SecurityConfig {
                         // permitAll 경로 먼저 명시 (더 구체적인 경로부터)
                         .requestMatchers("/api/members/register").permitAll()
                         .requestMatchers("/api/members/login").permitAll()
+                        .requestMatchers("/api/products/list").permitAll()
                         .requestMatchers("/api/products/{id}/image").permitAll()  // 상품 이미지는 공개 접근 허용
                         .requestMatchers("/ws/**", "/ws").permitAll()
                         .requestMatchers("/static/**", "/uploads/**").permitAll()
-                        
+
                         // authenticated 경로 명시 (더 구체적인 경로부터)
                         .requestMatchers("/api/members/**").authenticated()
                         .requestMatchers("/api/products/create").authenticated()
                         .requestMatchers("/api/products/{id}/**").authenticated()
                         .requestMatchers("/api/products/{id}").authenticated()
-                        .requestMatchers("/api/products/list").authenticated()
                         .requestMatchers("/api/products/member/**").authenticated()
                         .requestMatchers("/api/contracts/sign").authenticated()
                         .requestMatchers("/api/contracts/create").authenticated()
